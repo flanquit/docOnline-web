@@ -3,6 +3,8 @@ import './App.css';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'profile', label: 'Health Profile' },
+  { id: 'care-plans', label: 'Care Plans' },
   { id: 'consultations', label: 'Consultations' },
   { id: 'chat', label: 'Live Chat' },
   { id: 'pharmacies', label: 'Pharmacies' },
@@ -37,6 +39,31 @@ const services = [
   },
 ];
 
+const carePlans = [
+  {
+    id: 'essential',
+    name: 'Essential Care',
+    price: '$9/mo',
+    summary: 'For routine check-ins and medication guidance.',
+    perks: ['2 virtual consults', 'Refill alerts', 'Pharmacy pickup coordination'],
+    tone: 'recommended',
+  },
+  {
+    id: 'plus',
+    name: 'Chronic Care Plus',
+    price: '$19/mo',
+    summary: 'Designed for ARV, diabetic, and hypertension care.',
+    perks: ['5 virtual consults', 'Caregiver notifications', 'Priority pharmacy matching'],
+  },
+  {
+    id: 'family',
+    name: 'Family Care',
+    price: '$29/mo',
+    summary: 'Shared care dashboard for households.',
+    perks: ['8 virtual consults', 'Multi-patient profiles', 'Shared refill calendar'],
+  },
+];
+
 const consultations = [
   {
     id: 'c1',
@@ -59,6 +86,44 @@ const consultations = [
     time: 'Fri · 4:00 PM',
     mode: 'Video call',
   },
+];
+
+const profileStats = [
+  { label: 'Last check-in', value: '2 days ago' },
+  { label: 'Active medications', value: '3' },
+  { label: 'Upcoming consults', value: '1' },
+  { label: 'Care plan', value: 'Chronic Care Plus' },
+];
+
+const recentActivities = [
+  { title: 'Blood pressure readings uploaded', time: 'Yesterday · 9:12 AM' },
+  { title: 'Refill reminder sent to GreenLife Pharmacy', time: 'Mon · 4:10 PM' },
+  { title: 'Caregiver added to your plan', time: 'Sun · 6:40 PM' },
+];
+
+const treatmentHistory = [
+  {
+    title: 'ARV follow-up review',
+    date: 'Feb 18, 2026',
+    notes: 'Adherence on track. Continue daily regimen and hydration goals.',
+  },
+  {
+    title: 'Diabetic care update',
+    date: 'Jan 22, 2026',
+    notes: 'Adjusted meal plan. Next A1C check scheduled in 6 weeks.',
+  },
+];
+
+const medicationList = [
+  { name: 'ARV Daily Pack', dosage: '1 tablet daily', status: 'Active' },
+  { name: 'Metformin', dosage: '500mg · 2x daily', status: 'Active' },
+  { name: 'Vitamin D', dosage: '1000 IU daily', status: 'Completed' },
+];
+
+const documentList = [
+  { name: 'Lab results · A1C', date: 'Feb 16, 2026', type: 'PDF' },
+  { name: 'Prescription · ARV pack', date: 'Feb 12, 2026', type: 'PDF' },
+  { name: 'Consultation summary', date: 'Jan 22, 2026', type: 'Doc' },
 ];
 
 const pharmacies = [
@@ -386,7 +451,7 @@ export default function App() {
                       <button className="primary" onClick={() => setIsBookingOpen(true)}>
                         Book a consultation
                       </button>
-                      <button className="secondary" onClick={() => logAction('Care plan summary opened.')}>
+                      <button className="secondary" onClick={() => setActiveView('care-plans')}>
                         View care plans
                       </button>
                     </div>
@@ -450,6 +515,169 @@ export default function App() {
                   </div>
                 </section>
               </>
+            )}
+
+            {activeView === 'care-plans' && (
+              <section className="section">
+                <div className="section-header">
+                  <div>
+                    <p className="eyebrow">Care plans</p>
+                    <h2>Pick a package that fits your care journey.</h2>
+                  </div>
+                  <button className="secondary" onClick={() => logAction('Care plan comparison opened.')}>
+                    Compare plans
+                  </button>
+                </div>
+                <div className="care-plans-grid">
+                  {carePlans.map((plan) => (
+                    <div
+                      className={`plan-card ${plan.tone === 'recommended' ? 'featured' : ''}`}
+                      key={plan.id}
+                    >
+                      <div className="plan-head">
+                        <div>
+                          <h3>{plan.name}</h3>
+                          <p>{plan.summary}</p>
+                        </div>
+                        <span className="plan-price">{plan.price}</span>
+                      </div>
+                      <ul className="plan-perks">
+                        {plan.perks.map((perk) => (
+                          <li key={perk}>{perk}</li>
+                        ))}
+                      </ul>
+                      <button
+                        className={plan.tone === 'recommended' ? 'primary' : 'secondary'}
+                        onClick={() => logAction(`${plan.name} selected.`)}
+                      >
+                        Choose plan
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="plan-note">
+                  <p className="muted">
+                    All plans include secure messaging, pharmacy-ready prescriptions, and care team dashboards.
+                  </p>
+                  <button className="text-button" onClick={() => logAction('Care plan FAQ opened.')}>
+                    See plan FAQ
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {activeView === 'profile' && (
+              <section className="section">
+                <div className="section-header">
+                  <div>
+                    <p className="eyebrow">Health profile</p>
+                    <h2>Your care history, medications, and recent activity.</h2>
+                  </div>
+                  <button className="secondary" onClick={() => logAction('Profile summary exported.')}>
+                    Export summary
+                  </button>
+                </div>
+
+                <div className="profile-overview">
+                  {profileStats.map((stat) => (
+                    <div className="card" key={stat.label}>
+                      <p className="label">{stat.label}</p>
+                      <h3>{stat.value}</h3>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="profile-grid">
+                  <div className="card">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">Recent activity</p>
+                        <h3>Latest updates</h3>
+                      </div>
+                      <button className="text-button" onClick={() => logAction('Activity feed opened.')}>
+                        View all
+                      </button>
+                    </div>
+                    <div className="activity-list">
+                      {recentActivities.map((item) => (
+                        <div className="activity-item" key={item.title}>
+                          <p>{item.title}</p>
+                          <span>{item.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">Treatments</p>
+                        <h3>Recent care notes</h3>
+                      </div>
+                      <button className="text-button" onClick={() => logAction('Treatment history opened.')}>
+                        View history
+                      </button>
+                    </div>
+                    <div className="profile-list">
+                      {treatmentHistory.map((item) => (
+                        <div className="profile-row" key={item.title}>
+                          <div>
+                            <h4>{item.title}</h4>
+                            <p>{item.notes}</p>
+                          </div>
+                          <span>{item.date}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">Medications</p>
+                        <h3>Tablets & routines</h3>
+                      </div>
+                      <button className="text-button" onClick={() => logAction('Medication list updated.')}>
+                        Manage
+                      </button>
+                    </div>
+                    <div className="profile-list">
+                      {medicationList.map((item) => (
+                        <div className="profile-row" key={item.name}>
+                          <div>
+                            <h4>{item.name}</h4>
+                            <p>{item.dosage}</p>
+                          </div>
+                          <span>{item.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="section-header">
+                      <div>
+                        <p className="eyebrow">Documents</p>
+                        <h3>Reports & prescriptions</h3>
+                      </div>
+                      <button className="text-button" onClick={() => logAction('Documents opened.')}>
+                        Open docs
+                      </button>
+                    </div>
+                    <div className="profile-list">
+                      {documentList.map((doc) => (
+                        <div className="profile-row" key={doc.name}>
+                          <div>
+                            <h4>{doc.name}</h4>
+                            <p>{doc.type}</p>
+                          </div>
+                          <span>{doc.date}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
             )}
 
             {activeView === 'consultations' && (

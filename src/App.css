@@ -219,6 +219,52 @@
   gap: 16px;
 }
 
+.profile-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.profile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(16, 19, 35, 0.08);
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.profile-row h4 {
+  margin: 0 0 6px;
+}
+
+.profile-row p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.profile-row span {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .card {
   background: var(--panel);
   border-radius: 16px;
@@ -226,6 +272,80 @@
   display: grid;
   gap: 12px;
   box-shadow: 0 12px 24px rgba(16, 19, 35, 0.06);
+}
+
+.care-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.plan-card {
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--stroke);
+  box-shadow: 0 14px 28px rgba(16, 19, 35, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.plan-card.featured {
+  border-color: rgba(246, 190, 118, 0.6);
+  box-shadow: 0 18px 40px rgba(222, 163, 90, 0.2);
+  background: linear-gradient(160deg, rgba(255, 248, 236, 0.9), rgba(248, 252, 255, 0.9));
+}
+
+.plan-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plan-price {
+  font-weight: 700;
+  font-size: 20px;
+  color: #2b4662;
+  background: rgba(82, 132, 168, 0.12);
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.plan-perks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.plan-perks li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.plan-perks li::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(140deg, #f7c37a, #71b6e8);
+}
+
+.plan-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 .pill-row {
@@ -1016,6 +1136,11 @@ button.small {
   .landing-hero .hero-actions {
     flex-direction: column;
     width: 100%;
+  }
+
+  .plan-note {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .bg-icon {
