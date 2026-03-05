@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
 const menuItems = [
@@ -122,7 +122,10 @@ const initialChat = [
 ];
 
 export default function App() {
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [authView, setAuthView] = useState('login');
   const [activeView, setActiveView] = useState('dashboard');
+  const [isLoading, setIsLoading] = useState(true);
   const [activity, setActivity] = useState([
     { label: 'Welcome back! Your next consultation is at 2:30 PM.', time: 'Just now' },
   ]);
@@ -149,9 +152,179 @@ export default function App() {
     setChatInput('');
   };
 
+  useEffect(() => {
+    setIsLoading(true);
+    const timer = window.setTimeout(() => setIsLoading(false), 1200);
+    return () => window.clearTimeout(timer);
+  }, [isAuthed, activeView, authView]);
+
+  const loader = isLoading ? (
+    <div className="page-loader" role="status" aria-live="polite">
+      <div className="loader-card">
+        <div className="loader-orbit" />
+        <div className="loader-mark">
+          <span className="loader-dot" />
+          <span className="loader-dot" />
+          <span className="loader-dot" />
+        </div>
+        <div className="loader-text">
+          <p className="eyebrow">Doc Online</p>
+          <h2>Preparing your care space</h2>
+          <p className="muted">Syncing consultations, pharmacy, and support channels.</p>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (!isAuthed) {
+    return (
+      <>
+        {loader}
+        <div className="landing">
+          <div className="landing-bg" aria-hidden="true">
+          <span className="bg-orb orb-1" />
+          <span className="bg-orb orb-2" />
+          <span className="bg-orb orb-3" />
+          <span className="bg-orb orb-4" />
+          <span className="bg-orb orb-5" />
+          <span className="bg-trace trace-1" />
+          <span className="bg-trace trace-2" />
+          <span className="bg-trace trace-3" />
+          <svg className="bg-icon icon-1" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 20s-6.5-4.2-8.5-7.6C1.7 9.7 3.2 6.8 6.2 6.2c2-.4 3.6.6 4.8 2 1.2-1.4 2.8-2.4 4.8-2 3 .6 4.5 3.5 2.7 6.2C18.5 15.8 12 20 12 20Z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <svg className="bg-icon icon-2" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M3 12h4l2.5-5 4 10 2.5-5H21"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <svg className="bg-icon icon-3" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 3l7 3v5c0 5-3.5 8.2-7 10-3.5-1.8-7-5-7-10V6l7-3Z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+          </svg>
+          </div>
+          <header className="landing-nav">
+          <div className="logo">Doc Online</div>
+          <div className="landing-actions">
+            <button className="ghost" onClick={() => setAuthView('login')}>
+              Log in
+            </button>
+            <button className="primary" onClick={() => setAuthView('register')}>
+              Create account
+            </button>
+          </div>
+        </header>
+        <main className="landing-hero">
+          <div className="landing-copy">
+            <p className="eyebrow">Welcome to connected care</p>
+            <h1>Healthcare that feels human, organized, and always within reach.</h1>
+            <p className="subtext">
+              Doc Online keeps patients, doctors, and pharmacies aligned with real-time consultations, trusted refill
+              alerts, and seamless pickup coordination.
+            </p>
+            <div className="hero-actions">
+              <button className="primary" onClick={() => setAuthView('register')}>
+                Get started
+              </button>
+              <button className="secondary" onClick={() => setAuthView('login')}>
+                Sign in
+              </button>
+            </div>
+            <div className="hero-badges">
+              <span>Licensed clinicians</span>
+              <span>Pharmacy network coverage</span>
+              <span>Automated refill reminders</span>
+            </div>
+          </div>
+          <div className="landing-card">
+            <div className="landing-card-header">
+              <div>
+                <h3>{authView === 'login' ? 'Welcome back' : 'Create your account'}</h3>
+                <p className="muted">
+                  {authView === 'login'
+                    ? 'Log in to access your care dashboard.'
+                    : 'Register to start booking consultations.'}
+                </p>
+              </div>
+              <div className="pill">{authView === 'login' ? 'Login' : 'Register'}</div>
+            </div>
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setIsAuthed(true);
+              }}
+            >
+              {authView === 'register' && (
+                <label>
+                  Full name
+                  <input required placeholder="e.g. Tariro Moyo" />
+                </label>
+              )}
+              <label>
+                Email address
+                <input type="email" required placeholder="you@email.com" />
+              </label>
+              <label>
+                Password
+                <input type="password" required placeholder="Minimum 8 characters" />
+              </label>
+              {authView === 'register' && (
+                <label>
+                  Phone number
+                  <input required placeholder="+263 77 000 0000" />
+                </label>
+              )}
+              <button className="primary" type="submit">
+                {authView === 'login' ? 'Log in' : 'Create account'}
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')}
+              >
+                {authView === 'login' ? 'Need an account? Register' : 'Already have an account? Log in'}
+              </button>
+            </form>
+          </div>
+        </main>
+        <section className="landing-highlights">
+          <div className="card">
+            <h3>Unified care timeline</h3>
+            <p>Track consultations, medication refills, and follow-ups in one place.</p>
+          </div>
+          <div className="card">
+            <h3>Pharmacy-ready prescriptions</h3>
+            <p>Digital prescriptions route directly to nearby pharmacies for faster pickup.</p>
+          </div>
+          <div className="card">
+            <h3>Caregiver-ready alerts</h3>
+            <p>Loop in family or caregivers with consented reminders and updates.</p>
+          </div>
+        </section>
+        </div>
+      </>
+    );
+  }
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <>
+      {loader}
+      <div className="app-shell">
+        <aside className="sidebar">
         <div className="logo">Doc Online</div>
         <div className="profile-card">
           <p className="eyebrow">Patient</p>
@@ -172,13 +345,16 @@ export default function App() {
         </nav>
         <div className="sidebar-footer">
           <button className="ghost">Settings</button>
+          <button className="ghost" onClick={() => setIsAuthed(false)}>
+            Log out
+          </button>
           <button className="primary" onClick={() => setIsBookingOpen(true)}>
             New Consultation
           </button>
         </div>
-      </aside>
+        </aside>
 
-      <main className="app-main">
+        <main className="app-main">
         <header className="topbar">
           <div>
             <p className="eyebrow">Live system status</p>
@@ -739,6 +915,7 @@ export default function App() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
