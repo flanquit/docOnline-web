@@ -1,1149 +1,661 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 
-const menuItems = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'profile', label: 'Health Profile' },
-  { id: 'care-plans', label: 'Care Plans' },
-  { id: 'consultations', label: 'Consultations' },
-  { id: 'chat', label: 'Live Chat' },
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
+
+const demoAccounts = {
+  patient: { email: 'patient@doconline.test', password: 'password' },
+  admin: { email: 'admin@doconline.test', password: 'password' },
+  pending: { email: 'pending@doconline.test', password: 'password' },
+};
+
+const navigation = [
+  { id: 'dashboard', label: 'Overview' },
+  { id: 'profile', label: 'My Account' },
+  { id: 'doctors', label: 'Doctors' },
   { id: 'pharmacies', label: 'Pharmacies' },
-  { id: 'checkout', label: 'Pharmacy Checkout' },
-  { id: 'alerts', label: 'Refill Alerts' },
-  { id: 'support', label: 'Support' },
+  { id: 'packages', label: 'Care Packages' },
+  { id: 'patients', label: 'Patients' },
+  { id: 'roadmap', label: 'Next Modules' },
 ];
 
-const stats = [
-  { label: 'Active Patients', value: '28,400+' },
-  { label: 'Verified Pharmacies', value: '1,160' },
-  { label: 'Avg. Response Time', value: '6 min' },
-  { label: 'Medication Adherence', value: '92%' },
-];
-
-const services = [
+const roadmap = [
   {
-    title: 'Virtual Doctor Consultations',
-    copy: 'Book video or chat consultations with licensed clinicians, share files, and get digital prescriptions in minutes.',
+    title: 'Booking Requests',
+    text: 'Request a doctor visit and track the status.',
+    status: 'Coming soon',
   },
   {
-    title: 'Smart Pharmacy Match',
-    copy: 'We use your location to surface the closest open pharmacies, their inventory highlights, and pickup options.',
+    title: 'Nearest Pharmacy',
+    text: 'Find nearby open pharmacies faster.',
+    status: 'Coming soon',
   },
   {
-    title: 'Refill & Follow-up Alerts',
-    copy: 'Automated reminders for ARV, diabetic, hypertension, and chronic care patients before refill dates.',
-  },
-  {
-    title: 'Caregiver & Family Access',
-    copy: 'Invite a trusted caregiver to receive updates, reminders, and pharmacy pickup instructions.',
+    title: 'Medication Reminders',
+    text: 'Get reminders before medicine runs out.',
+    status: 'Coming soon',
   },
 ];
 
-const carePlans = [
-  {
-    id: 'essential',
-    name: 'Essential Care',
-    price: '$9/mo',
-    summary: 'For routine check-ins and medication guidance.',
-    perks: ['2 virtual consults', 'Refill alerts', 'Pharmacy pickup coordination'],
-    tone: 'recommended',
-  },
-  {
-    id: 'plus',
-    name: 'Chronic Care Plus',
-    price: '$19/mo',
-    summary: 'Designed for ARV, diabetic, and hypertension care.',
-    perks: ['5 virtual consults', 'Caregiver notifications', 'Priority pharmacy matching'],
-  },
-  {
-    id: 'family',
-    name: 'Family Care',
-    price: '$29/mo',
-    summary: 'Shared care dashboard for households.',
-    perks: ['8 virtual consults', 'Multi-patient profiles', 'Shared refill calendar'],
-  },
-];
+function money(value) {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
-const consultations = [
-  {
-    id: 'c1',
-    name: 'Dr. L. Chipo',
-    specialty: 'Family Medicine',
-    time: 'Today · 2:30 PM',
-    mode: 'Video call',
-  },
-  {
-    id: 'c2',
-    name: 'Dr. T. Moyo',
-    specialty: 'Diabetic Care',
-    time: 'Tomorrow · 9:00 AM',
-    mode: 'Chat',
-  },
-  {
-    id: 'c3',
-    name: 'Nurse K. Ncube',
-    specialty: 'ARV Adherence',
-    time: 'Fri · 4:00 PM',
-    mode: 'Video call',
-  },
-];
+function initials(name = 'DO') {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
 
-const profileStats = [
-  { label: 'Last check-in', value: '2 days ago' },
-  { label: 'Active medications', value: '3' },
-  { label: 'Upcoming consults', value: '1' },
-  { label: 'Care plan', value: 'Chronic Care Plus' },
-];
+function Field({ label, children }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
 
-const recentActivities = [
-  { title: 'Blood pressure readings uploaded', time: 'Yesterday · 9:12 AM' },
-  { title: 'Refill reminder sent to GreenLife Pharmacy', time: 'Mon · 4:10 PM' },
-  { title: 'Caregiver added to your plan', time: 'Sun · 6:40 PM' },
-];
-
-const treatmentHistory = [
-  {
-    title: 'ARV follow-up review',
-    date: 'Feb 18, 2026',
-    notes: 'Adherence on track. Continue daily regimen and hydration goals.',
-  },
-  {
-    title: 'Diabetic care update',
-    date: 'Jan 22, 2026',
-    notes: 'Adjusted meal plan. Next A1C check scheduled in 6 weeks.',
-  },
-];
-
-const medicationList = [
-  { name: 'ARV Daily Pack', dosage: '1 tablet daily', status: 'Active' },
-  { name: 'Metformin', dosage: '500mg · 2x daily', status: 'Active' },
-  { name: 'Vitamin D', dosage: '1000 IU daily', status: 'Completed' },
-];
-
-const documentList = [
-  { name: 'Lab results · A1C', date: 'Feb 16, 2026', type: 'PDF' },
-  { name: 'Prescription · ARV pack', date: 'Feb 12, 2026', type: 'PDF' },
-  { name: 'Consultation summary', date: 'Jan 22, 2026', type: 'Doc' },
-];
-
-const pharmacies = [
-  {
-    name: 'GreenLife Pharmacy',
-    distance: '0.8 km',
-    hours: 'Open · Closes 9:30 PM',
-    tags: ['24/7 hotline', 'ARV stocked', 'Pickup in 15 min'],
-  },
-  {
-    name: 'MetroCare Pharmacy',
-    distance: '1.4 km',
-    hours: 'Open · Closes 10:00 PM',
-    tags: ['Diabetic care', 'Delivery available', 'Insurance accepted'],
-  },
-  {
-    name: 'WellSpring Pharmacy',
-    distance: '2.1 km',
-    hours: 'Open · Closes 8:00 PM',
-    tags: ['Family care', 'Vaccination', 'Chronic meds'],
-  },
-];
-
-const alerts = [
-  {
-    title: 'ARV Refill',
-    copy: 'Next pickup due in 12 days. We will notify your pharmacy and caregiver.',
-    date: 'Apr 15',
-  },
-  {
-    title: 'Diabetes Follow-up',
-    copy: 'Schedule your check-in with the diabetic nurse within 7 days.',
-    date: 'Apr 22',
-  },
-  {
-    title: 'Blood Pressure Review',
-    copy: 'Reminder sent to measure BP and submit readings this week.',
-    date: 'Apr 27',
-  },
-];
-
-const faqs = [
-  {
-    q: 'Is the consultation private and secure?',
-    a: 'Yes. All consultations are end-to-end encrypted and follow healthcare data protection standards.',
-  },
-  {
-    q: 'Can I choose a specific pharmacy?',
-    a: 'Absolutely. You can set a preferred pharmacy or pick from the nearest available options every time.',
-  },
-  {
-    q: 'How far in advance do alerts go out?',
-    a: 'Alerts are configurable. By default, you receive reminders 14 days and 3 days before refill dates.',
-  },
-];
-
-const initialChat = [
-  { from: 'Dr. Chipo', time: '2:02 PM', text: 'Hello Tariro, how are you feeling today?' },
-  { from: 'You', time: '2:03 PM', text: 'I am feeling better. My BP is slightly high though.' },
-  { from: 'Dr. Chipo', time: '2:04 PM', text: 'Thanks for sharing. Please upload your BP readings.' },
-];
+function EmptyState({ title, text }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon">+</div>
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </div>
+  );
+}
 
 export default function App() {
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [authView, setAuthView] = useState('login');
+  const [token, setToken] = useState(localStorage.getItem('doconline_token') ?? '');
+  const [user, setUser] = useState(null);
+  const [authMode, setAuthMode] = useState('login');
   const [activeView, setActiveView] = useState('dashboard');
-  const [isLoading, setIsLoading] = useState(true);
+  const [authForm, setAuthForm] = useState({
+    name: 'Tariro Moyo',
+    email: demoAccounts.patient.email,
+    password: demoAccounts.patient.password,
+  });
+  const [doctors, setDoctors] = useState([]);
+  const [pharmacies, setPharmacies] = useState([]);
+  const [packages, setPackages] = useState([]);
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
   const [activity, setActivity] = useState([
-    { label: 'Welcome back! Your next consultation is at 2:30 PM.', time: 'Just now' },
+    'Care dashboard is ready.',
+    'Welcome back.',
   ]);
-  const [isBookingOpen, setIsBookingOpen] = useState(false);
-  const [bookingSubmitted, setBookingSubmitted] = useState(false);
-  const [chatMessages, setChatMessages] = useState(initialChat);
-  const [chatInput, setChatInput] = useState('');
-  const [checkoutSubmitted, setCheckoutSubmitted] = useState(false);
-  const [docSubmitted, setDocSubmitted] = useState(false);
 
-  const logAction = (label) => {
-    setActivity((prev) => [{ label, time: 'Just now' }, ...prev].slice(0, 5));
-  };
+  const activePackage = user?.care_package ?? null;
+  const activePatientCount = patients.length;
+  const activeDoctorCount = doctors.length;
+  const activePharmacyCount = pharmacies.length;
+  const activePackageCount = packages.length;
 
-  const activeLabel = useMemo(
-    () => menuItems.find((item) => item.id === activeView)?.label ?? 'Dashboard',
+  const currentViewLabel = useMemo(
+    () => navigation.find((item) => item.id === activeView)?.label ?? 'Overview',
     [activeView]
   );
 
-  const handleChatSend = () => {
-    if (!chatInput.trim()) return;
-    const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    setChatMessages((prev) => [...prev, { from: 'You', time, text: chatInput.trim() }]);
-    setChatInput('');
+  const addActivity = (message) => {
+    setActivity((items) => [message, ...items].slice(0, 6));
   };
 
+  const fillDemo = (account) => {
+    setAuthMode('login');
+    setAuthForm((form) => ({
+      ...form,
+      email: demoAccounts[account].email,
+      password: demoAccounts[account].password,
+    }));
+    setError('');
+    setNotice('');
+  };
+
+  const apiFetch = useCallback(async (path, options = {}) => {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers ?? {}),
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message =
+        data.message ||
+        Object.values(data.errors ?? {})
+          .flat()
+          .join(' ') ||
+        'Request failed.';
+      throw new Error(message);
+    }
+
+    return data;
+  }, [token]);
+
+  const loadPublicData = useCallback(async () => {
+    const [doctorData, pharmacyData, packageData, patientData] = await Promise.all([
+      apiFetch('/api/doctors'),
+      apiFetch('/api/pharmacies'),
+      apiFetch('/api/care-packages'),
+      apiFetch('/api/patients'),
+    ]);
+
+    setDoctors(doctorData);
+    setPharmacies(pharmacyData);
+    setPackages(packageData);
+    setPatients(patientData);
+  }, [apiFetch]);
+
+  const syncProfile = useCallback(async () => {
+    if (!token) {
+      setUser(null);
+      return;
+    }
+
+    const profile = await apiFetch('/api/me');
+    setUser(profile);
+  }, [apiFetch, token]);
+
   useEffect(() => {
-    setIsLoading(true);
-    const timer = window.setTimeout(() => setIsLoading(false), 1200);
-    return () => window.clearTimeout(timer);
-  }, [isAuthed, activeView, authView]);
+    let active = true;
 
-  const loader = isLoading ? (
-    <div className="page-loader" role="status" aria-live="polite">
-      <div className="loader-card">
-        <div className="loader-orbit" />
-        <div className="loader-mark">
-          <span className="loader-dot" />
-          <span className="loader-dot" />
-          <span className="loader-dot" />
-        </div>
-        <div className="loader-text">
-          <p className="eyebrow">Doc Online</p>
-          <h2>Preparing your care space</h2>
-          <p className="muted">Syncing consultations, pharmacy, and support channels.</p>
-        </div>
-      </div>
-    </div>
-  ) : null;
+    const boot = async () => {
+      setLoading(true);
+      try {
+        await loadPublicData();
+        if (token) {
+          await syncProfile();
+        }
+      } catch (err) {
+        if (active) {
+          setError(err.message);
+          if (token) {
+            localStorage.removeItem('doconline_token');
+            setToken('');
+            setUser(null);
+          }
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
 
-  if (!isAuthed) {
+    boot();
+
+    return () => {
+      active = false;
+    };
+  }, [token, loadPublicData, syncProfile]);
+
+  const submitAuth = async (event) => {
+    event.preventDefault();
+    setAuthBusy(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const path = authMode === 'login' ? '/api/login' : '/api/register';
+      const payload =
+        authMode === 'login'
+          ? { email: authForm.email, password: authForm.password }
+          : { name: authForm.name, email: authForm.email, password: authForm.password };
+
+      const data = await apiFetch(path, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: token ? { Authorization: '' } : {},
+      });
+
+      if (authMode === 'register') {
+        setNotice(data.message ?? 'Account created. Ask the admin to activate it.');
+        setAuthMode('login');
+        addActivity('New account created.');
+        return;
+      }
+
+      localStorage.setItem('doconline_token', data.token);
+      setToken(data.token);
+      setUser(data.user);
+      setActiveView('dashboard');
+      addActivity(`${data.user.name} logged in successfully.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      if (token) {
+        await apiFetch('/api/logout', { method: 'POST' });
+      }
+    } catch {
+      setNotice('Logged out locally.');
+    }
+
+    localStorage.removeItem('doconline_token');
+    setToken('');
+    setUser(null);
+    setActiveView('dashboard');
+  };
+
+  if (!user) {
     return (
-      <>
-        {loader}
-        <div className="landing">
-          <div className="landing-bg" aria-hidden="true">
-          <span className="bg-orb orb-1" />
-          <span className="bg-orb orb-2" />
-          <span className="bg-orb orb-3" />
-          <span className="bg-orb orb-4" />
-          <span className="bg-orb orb-5" />
-          <span className="bg-trace trace-1" />
-          <span className="bg-trace trace-2" />
-          <span className="bg-trace trace-3" />
-          <svg className="bg-icon icon-1" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 20s-6.5-4.2-8.5-7.6C1.7 9.7 3.2 6.8 6.2 6.2c2-.4 3.6.6 4.8 2 1.2-1.4 2.8-2.4 4.8-2 3 .6 4.5 3.5 2.7 6.2C18.5 15.8 12 20 12 20Z"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <svg className="bg-icon icon-2" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M3 12h4l2.5-5 4 10 2.5-5H21"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <svg className="bg-icon icon-3" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 3l7 3v5c0 5-3.5 8.2-7 10-3.5-1.8-7-5-7-10V6l7-3Z"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinejoin="round"
-            />
-          </svg>
+      <main className="auth-page">
+        <section className="auth-hero">
+          <div className="brand-row">
+            <div className="brand-mark">DO</div>
+            <span>Doc Online</span>
           </div>
-          <header className="landing-nav">
-          <div className="logo">Doc Online</div>
-          <div className="landing-actions">
-            <button className="ghost" onClick={() => setAuthView('login')}>
-              Log in
-            </button>
-            <button className="primary" onClick={() => setAuthView('register')}>
-              Create account
-            </button>
-          </div>
-        </header>
-        <main className="landing-hero">
-          <div className="landing-copy">
-            <p className="eyebrow">Welcome to connected care</p>
-            <h1>Healthcare that feels human, organized, and always within reach.</h1>
-            <p className="subtext">
-              Doc Online keeps patients, doctors, and pharmacies aligned with real-time consultations, trusted refill
-              alerts, and seamless pickup coordination.
+          <div className="hero-copy">
+            <span className="eyebrow">Integrated telemedicine platform</span>
+            <h1>Care, doctors, pharmacies, and packages in one place.</h1>
+            <p>
+              Sign in to manage your care profile, view providers, and check available packages.
             </p>
-            <div className="hero-actions">
-              <button className="primary" onClick={() => setAuthView('register')}>
-                Get started
-              </button>
-              <button className="secondary" onClick={() => setAuthView('login')}>
-                Sign in
-              </button>
+          </div>
+          <div className="metric-strip">
+            <div>
+              <strong>{activeDoctorCount}</strong>
+              <span>Doctors</span>
             </div>
-            <div className="hero-badges">
-              <span>Licensed clinicians</span>
-              <span>Pharmacy network coverage</span>
-              <span>Automated refill reminders</span>
+            <div>
+              <strong>{activePharmacyCount}</strong>
+              <span>Pharmacies</span>
             </div>
-          </div>
-          <div className="landing-card">
-            <div className="landing-card-header">
-              <div>
-                <h3>{authView === 'login' ? 'Welcome back' : 'Create your account'}</h3>
-                <p className="muted">
-                  {authView === 'login'
-                    ? 'Log in to access your care dashboard.'
-                    : 'Register to start booking consultations.'}
-                </p>
-              </div>
-              <div className="pill">{authView === 'login' ? 'Login' : 'Register'}</div>
+            <div>
+              <strong>{activePackageCount}</strong>
+              <span>Packages</span>
             </div>
-            <form
-              className="form-grid"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setIsAuthed(true);
-              }}
-            >
-              {authView === 'register' && (
-                <label>
-                  Full name
-                  <input required placeholder="e.g. Tariro Moyo" />
-                </label>
-              )}
-              <label>
-                Email address
-                <input type="email" required placeholder="you@email.com" />
-              </label>
-              <label>
-                Password
-                <input type="password" required placeholder="Minimum 8 characters" />
-              </label>
-              {authView === 'register' && (
-                <label>
-                  Phone number
-                  <input required placeholder="+263 77 000 0000" />
-                </label>
-              )}
-              <button className="primary" type="submit">
-                {authView === 'login' ? 'Log in' : 'Create account'}
-              </button>
-              <button
-                className="text-button"
-                type="button"
-                onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')}
-              >
-                {authView === 'login' ? 'Need an account? Register' : 'Already have an account? Log in'}
-              </button>
-            </form>
-          </div>
-        </main>
-        <section className="landing-highlights">
-          <div className="card">
-            <h3>Unified care timeline</h3>
-            <p>Track consultations, medication refills, and follow-ups in one place.</p>
-          </div>
-          <div className="card">
-            <h3>Pharmacy-ready prescriptions</h3>
-            <p>Digital prescriptions route directly to nearby pharmacies for faster pickup.</p>
-          </div>
-          <div className="card">
-            <h3>Caregiver-ready alerts</h3>
-            <p>Loop in family or caregivers with consented reminders and updates.</p>
           </div>
         </section>
-        </div>
-      </>
+
+        <section className="auth-card">
+          <div className="card-heading">
+            <div>
+              <span className="eyebrow">{authMode === 'login' ? 'Login' : 'Register'}</span>
+              <h2>{authMode === 'login' ? 'Welcome back' : 'Create patient account'}</h2>
+            </div>
+            <button className="link-button" type="button" onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
+              {authMode === 'login' ? 'Register' : 'Login'}
+            </button>
+          </div>
+
+          <div className="demo-row">
+            <button type="button" onClick={() => fillDemo('patient')}>Patient demo</button>
+            <button type="button" onClick={() => fillDemo('admin')}>Admin demo</button>
+            <button type="button" onClick={() => fillDemo('pending')}>Inactive demo</button>
+          </div>
+
+          <form className="form-stack" onSubmit={submitAuth}>
+            {authMode === 'register' && (
+              <Field label="Full name">
+                <input
+                  value={authForm.name}
+                  onChange={(event) => setAuthForm({ ...authForm, name: event.target.value })}
+                  required
+                />
+              </Field>
+            )}
+            <Field label="Email address">
+              <input
+                type="email"
+                value={authForm.email}
+                onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
+                required
+              />
+            </Field>
+            <Field label="Password">
+              <input
+                type="password"
+                value={authForm.password}
+                onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
+                minLength={8}
+                required
+              />
+            </Field>
+            <button className="primary-button" type="submit" disabled={authBusy}>
+              {authBusy ? 'Please wait...' : authMode === 'login' ? 'Log in' : 'Create account'}
+            </button>
+          </form>
+
+          {error && <p className="message error-message">{error}</p>}
+          {notice && <p className="message success-message">{notice}</p>}
+
+          <div className="credential-card">
+            <span>Default login</span>
+            <strong>{demoAccounts.patient.email}</strong>
+            <code>{demoAccounts.patient.password}</code>
+          </div>
+        </section>
+      </main>
     );
   }
 
   return (
-    <>
-      {loader}
-      <div className="app-shell">
-        <aside className="sidebar">
-        <div className="logo">Doc Online</div>
-        <div className="profile-card">
-          <p className="eyebrow">Patient</p>
-          <h3>Tariro M.</h3>
-          <p>Harare, Zimbabwe</p>
-          <span className="status-chip">Care plan active</span>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand-row">
+          <div className="brand-mark">DO</div>
+          <span>Doc Online</span>
         </div>
-        <nav className="menu">
-          {menuItems.map((item) => (
+
+        <div className="user-card">
+          <div className="avatar">{initials(user.name)}</div>
+          <div>
+            <h3>{user.name}</h3>
+            <p>{user.email}</p>
+          </div>
+          <span className={user.is_admin ? 'role-chip admin' : 'role-chip'}>
+            {user.is_admin ? 'Admin' : 'Patient'}
+          </span>
+        </div>
+
+        <nav className="nav-list" aria-label="Main navigation">
+          {navigation.map((item) => (
             <button
               key={item.id}
-              className={`menu-btn ${activeView === item.id ? 'active' : ''}`}
+              className={activeView === item.id ? 'active' : ''}
+              type="button"
               onClick={() => setActiveView(item.id)}
             >
               {item.label}
             </button>
           ))}
         </nav>
-        <div className="sidebar-footer">
-          <button className="ghost">Settings</button>
-          <button className="ghost" onClick={() => setIsAuthed(false)}>
+
+        <div className="sidebar-actions">
+          <a className="secondary-button" href={`${API_BASE_URL}/admin`} target="_blank" rel="noreferrer">
+            Admin portal
+          </a>
+          <button className="ghost-button" type="button" onClick={logout}>
             Log out
           </button>
-          <button className="primary" onClick={() => setIsBookingOpen(true)}>
-            New Consultation
-          </button>
         </div>
-        </aside>
+      </aside>
 
-        <main className="app-main">
+      <main className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Live system status</p>
-            <h2>{activeView === 'dashboard' ? 'Care Dashboard' : activeLabel}</h2>
+            <span className="eyebrow">Doc Online</span>
+            <h1>{currentViewLabel}</h1>
           </div>
           <div className="topbar-actions">
-            <button className="ghost" onClick={() => logAction('Location refreshed for nearby pharmacies.')}>
-              Refresh location
-            </button>
-            <button className="secondary" onClick={() => logAction('New message sent to your care team.')}>
-              Message care team
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={async () => {
+                setLoading(true);
+                setError('');
+                try {
+                  await loadPublicData();
+                  await syncProfile();
+                  addActivity('Data refreshed from the backend API.');
+                } catch (err) {
+                  setError(err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              Refresh data
             </button>
           </div>
         </header>
 
-        <div className="main-grid">
-          <section className="main-content">
-            {activeView === 'dashboard' && (
-              <>
-                <section className="hero">
-                  <div className="hero-text">
-                    <p className="eyebrow">Digital healthcare, designed for real life</p>
-                    <h1>Consult doctors online, connect to the closest pharmacy, and never miss a refill.</h1>
-                    <p className="subtext">
-                      Doc Online links patients, clinicians, and pharmacies in a single care journey. From virtual
-                      consultations to automated ARV and diabetic refill alerts, you stay supported every step.
-                    </p>
-                    <div className="hero-actions">
-                      <button className="primary" onClick={() => setIsBookingOpen(true)}>
-                        Book a consultation
-                      </button>
-                      <button className="secondary" onClick={() => setActiveView('care-plans')}>
-                        View care plans
-                      </button>
-                    </div>
-                    <div className="hero-badges">
-                      <span>Licensed clinicians</span>
-                      <span>Smart refill alerts</span>
-                      <span>Nearest pharmacy matching</span>
-                    </div>
-                  </div>
-                  <div className="hero-card">
-                    <div className="hero-card-header">
-                      <div>
-                        <h3>Today’s Care Dashboard</h3>
-                        <p>Updated 3 mins ago</p>
-                      </div>
-                      <span className="pill">Live</span>
-                    </div>
-                    <div className="hero-card-grid">
-                      {stats.map((stat) => (
-                        <div className="stat" key={stat.label}>
-                          <h4>{stat.value}</h4>
-                          <p>{stat.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="hero-card-footer">
-                      <div>
-                        <p className="label">Next appointment</p>
-                        <h4>Video consult · 2:30 PM</h4>
-                      </div>
-                      <button className="secondary small" onClick={() => logAction('Joining video consultation...')}>
-                        Join now
-                      </button>
-                    </div>
-                  </div>
-                </section>
+        {error && <p className="message error-message">{error}</p>}
+        {loading && <div className="loading-line" />}
 
-                <section className="section">
-                  <div className="section-header">
-                    <div>
-                      <p className="eyebrow">What the platform delivers</p>
-                      <h2>One system for consultations, prescriptions, and pharmacy care.</h2>
-                    </div>
-                    <button className="secondary" onClick={() => logAction('Feature overview opened.')}>
-                      Explore features
-                    </button>
-                  </div>
-                  <div className="grid">
-                    {services.map((service) => (
-                      <div className="card" key={service.title}>
-                        <h3>{service.title}</h3>
-                        <p>{service.copy}</p>
-                        <button
-                          className="text-button"
-                          onClick={() => logAction(`${service.title} details opened.`)}
-                        >
-                          Learn more
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </>
-            )}
-
-            {activeView === 'care-plans' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Care plans</p>
-                    <h2>Pick a package that fits your care journey.</h2>
-                  </div>
-                  <button className="secondary" onClick={() => logAction('Care plan comparison opened.')}>
-                    Compare plans
-                  </button>
-                </div>
-                <div className="care-plans-grid">
-                  {carePlans.map((plan) => (
-                    <div
-                      className={`plan-card ${plan.tone === 'recommended' ? 'featured' : ''}`}
-                      key={plan.id}
-                    >
-                      <div className="plan-head">
-                        <div>
-                          <h3>{plan.name}</h3>
-                          <p>{plan.summary}</p>
-                        </div>
-                        <span className="plan-price">{plan.price}</span>
-                      </div>
-                      <ul className="plan-perks">
-                        {plan.perks.map((perk) => (
-                          <li key={perk}>{perk}</li>
-                        ))}
-                      </ul>
-                      <button
-                        className={plan.tone === 'recommended' ? 'primary' : 'secondary'}
-                        onClick={() => logAction(`${plan.name} selected.`)}
-                      >
-                        Choose plan
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="plan-note">
-                  <p className="muted">
-                    All plans include secure messaging, pharmacy-ready prescriptions, and care team dashboards.
-                  </p>
-                  <button className="text-button" onClick={() => logAction('Care plan FAQ opened.')}>
-                    See plan FAQ
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {activeView === 'profile' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Health profile</p>
-                    <h2>Your care history, medications, and recent activity.</h2>
-                  </div>
-                  <button className="secondary" onClick={() => logAction('Profile summary exported.')}>
-                    Export summary
-                  </button>
-                </div>
-
-                <div className="profile-overview">
-                  {profileStats.map((stat) => (
-                    <div className="card" key={stat.label}>
-                      <p className="label">{stat.label}</p>
-                      <h3>{stat.value}</h3>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="profile-grid">
-                  <div className="card">
-                    <div className="section-header">
-                      <div>
-                        <p className="eyebrow">Recent activity</p>
-                        <h3>Latest updates</h3>
-                      </div>
-                      <button className="text-button" onClick={() => logAction('Activity feed opened.')}>
-                        View all
-                      </button>
-                    </div>
-                    <div className="activity-list">
-                      {recentActivities.map((item) => (
-                        <div className="activity-item" key={item.title}>
-                          <p>{item.title}</p>
-                          <span>{item.time}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="section-header">
-                      <div>
-                        <p className="eyebrow">Treatments</p>
-                        <h3>Recent care notes</h3>
-                      </div>
-                      <button className="text-button" onClick={() => logAction('Treatment history opened.')}>
-                        View history
-                      </button>
-                    </div>
-                    <div className="profile-list">
-                      {treatmentHistory.map((item) => (
-                        <div className="profile-row" key={item.title}>
-                          <div>
-                            <h4>{item.title}</h4>
-                            <p>{item.notes}</p>
-                          </div>
-                          <span>{item.date}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="section-header">
-                      <div>
-                        <p className="eyebrow">Medications</p>
-                        <h3>Tablets & routines</h3>
-                      </div>
-                      <button className="text-button" onClick={() => logAction('Medication list updated.')}>
-                        Manage
-                      </button>
-                    </div>
-                    <div className="profile-list">
-                      {medicationList.map((item) => (
-                        <div className="profile-row" key={item.name}>
-                          <div>
-                            <h4>{item.name}</h4>
-                            <p>{item.dosage}</p>
-                          </div>
-                          <span>{item.status}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="section-header">
-                      <div>
-                        <p className="eyebrow">Documents</p>
-                        <h3>Reports & prescriptions</h3>
-                      </div>
-                      <button className="text-button" onClick={() => logAction('Documents opened.')}>
-                        Open docs
-                      </button>
-                    </div>
-                    <div className="profile-list">
-                      {documentList.map((doc) => (
-                        <div className="profile-row" key={doc.name}>
-                          <div>
-                            <h4>{doc.name}</h4>
-                            <p>{doc.type}</p>
-                          </div>
-                          <span>{doc.date}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {activeView === 'consultations' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Consultations</p>
-                    <h2>Upcoming appointments</h2>
-                  </div>
-                  <button className="primary" onClick={() => setIsBookingOpen(true)}>
-                    Schedule new
-                  </button>
-                </div>
-                <div className="grid">
-                  {consultations.map((consultation) => (
-                    <div className="card" key={consultation.id}>
-                      <h3>{consultation.name}</h3>
-                      <p>{consultation.specialty}</p>
-                      <div className="pill-row">
-                        <span className="pill">{consultation.time}</span>
-                        <span className="pill">{consultation.mode}</span>
-                      </div>
-                      <button
-                        className="primary"
-                        onClick={() => logAction(`Joining ${consultation.mode} with ${consultation.name}.`)}
-                      >
-                        Join session
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="form-card">
-                  <h3>Doctor consultation form</h3>
-                  <p className="muted">Fill in symptoms and attach recent readings before the session.</p>
-                  <form
-                    className="form-grid"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      setDocSubmitted(true);
-                      logAction('Consultation form submitted to doctor.');
-                    }}
-                  >
-                    <label>
-                      Symptoms summary
-                      <textarea required placeholder="Describe symptoms, duration, and triggers." rows={4} />
-                    </label>
-                    <label>
-                      Upload BP / sugar readings
-                      <input type="file" />
-                    </label>
-                    <label>
-                      Preferred consultation mode
-                      <select required>
-                        <option value="">Select mode</option>
-                        <option>Video call</option>
-                        <option>Chat</option>
-                        <option>Phone call</option>
-                      </select>
-                    </label>
-                    <button className="primary" type="submit">
-                      Submit to doctor
-                    </button>
-                    {docSubmitted && <p className="success">Submitted! The doctor will review before your session.</p>}
-                  </form>
-                </div>
-              </section>
-            )}
-
-            {activeView === 'chat' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Live chat</p>
-                    <h2>Chat with your care team</h2>
-                  </div>
-                  <button className="secondary" onClick={() => logAction('Chat transcript saved.')}>
-                    Save transcript
-                  </button>
-                </div>
-                <div className="chat-window">
-                  <div className="chat-header">
-                    <div>
-                      <h3>Dr. L. Chipo</h3>
-                      <p>Family Medicine · Online now</p>
-                    </div>
-                    <button className="ghost" onClick={() => logAction('Video call requested from chat.')}>
-                      Request video call
-                    </button>
-                  </div>
-                  <div className="chat-messages">
-                    {chatMessages.map((message, index) => (
-                      <div
-                        key={`${message.text}-${index}`}
-                        className={`chat-bubble ${message.from === 'You' ? 'sent' : 'received'}`}
-                      >
-                        <p>{message.text}</p>
-                        <span>{message.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="chat-input">
-                    <input
-                      type="text"
-                      placeholder="Type your message..."
-                      value={chatInput}
-                      onChange={(event) => setChatInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          handleChatSend();
-                        }
-                      }}
-                    />
-                    <button className="primary" onClick={handleChatSend}>
-                      Send
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {activeView === 'pharmacies' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Pharmacy proximity</p>
-                    <h2>Find the closest pharmacy with the right stock.</h2>
-                  </div>
-                  <button className="secondary" onClick={() => logAction('Pharmacy map refreshed.')}>
-                    See map
-                  </button>
-                </div>
-                <div className="pharmacy-layout">
-                  <div className="map-card">
-                    <div className="map">
-                      <div className="map-dot"></div>
-                      <div className="map-ring"></div>
-                      <p>Interactive map preview</p>
-                    </div>
-                    <div className="map-info">
-                      <h3>Location smart match</h3>
-                      <p>
-                        We surface the nearest open pharmacies and highlight ARV, diabetic, and chronic medication
-                        availability in real time.
-                      </p>
-                      <div className="map-actions">
-                        <button
-                          className="primary small"
-                          onClick={() => logAction('Location shared with pharmacy network.')}
-                        >
-                          Share location
-                        </button>
-                        <button className="ghost small" onClick={() => logAction('Default area saved.')}>
-                          Set default area
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pharmacy-list">
-                    {pharmacies.map((pharmacy) => (
-                      <div className="card" key={pharmacy.name}>
-                        <div className="pharmacy-head">
-                          <div>
-                            <h3>{pharmacy.name}</h3>
-                            <p>{pharmacy.hours}</p>
-                          </div>
-                          <span className="pill">{pharmacy.distance}</span>
-                        </div>
-                        <div className="tags">
-                          {pharmacy.tags.map((tag) => (
-                            <span key={tag}>{tag}</span>
-                          ))}
-                        </div>
-                        <button
-                          className="text-button"
-                          onClick={() => logAction(`Pickup reserved at ${pharmacy.name}.`)}
-                        >
-                          Reserve pickup
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {activeView === 'checkout' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Pharmacy checkout</p>
-                    <h2>Reserve your medication pickup</h2>
-                  </div>
-                  <button className="secondary" onClick={() => logAction('Checkout summary downloaded.')}>
-                    Download summary
-                  </button>
-                </div>
-                <div className="checkout-layout">
-                  <form
-                    className="form-card"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      setCheckoutSubmitted(true);
-                      logAction('Checkout submitted to pharmacy.');
-                    }}
-                  >
-                    <h3>Pickup details</h3>
-                    <label>
-                      Select pharmacy
-                      <select required>
-                        <option value="">Choose pharmacy</option>
-                        {pharmacies.map((pharmacy) => (
-                          <option key={pharmacy.name}>{pharmacy.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Prescription ID
-                      <input required placeholder="RX-2045-ARV" />
-                    </label>
-                    <label>
-                      Pickup date
-                      <input type="date" required />
-                    </label>
-                    <label>
-                      Delivery option
-                      <select required>
-                        <option value="">Select option</option>
-                        <option>Pick up at pharmacy</option>
-                        <option>Home delivery</option>
-                        <option>Caregiver pickup</option>
-                      </select>
-                    </label>
-                    <label>
-                      Notes for pharmacist
-                      <textarea rows={3} placeholder="Any allergies or timing notes?" />
-                    </label>
-                    <button className="primary" type="submit">
-                      Confirm pickup
-                    </button>
-                    {checkoutSubmitted && (
-                      <p className="success">Success! Your pharmacy has been notified and will confirm shortly.</p>
-                    )}
-                  </form>
-                  <div className="summary-card">
-                    <h3>Order summary</h3>
-                    <div className="summary-row">
-                      <span>ARV Refill Pack</span>
-                      <strong>$0.00</strong>
-                    </div>
-                    <div className="summary-row">
-                      <span>Diabetic strips</span>
-                      <strong>$8.50</strong>
-                    </div>
-                    <div className="summary-row">
-                      <span>Delivery</span>
-                      <strong>$2.00</strong>
-                    </div>
-                    <div className="summary-row total">
-                      <span>Total</span>
-                      <strong>$10.50</strong>
-                    </div>
-                    <p className="muted">Insurance coverage applied. Pay at pickup or via mobile money.</p>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {activeView === 'alerts' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Medication adherence</p>
-                    <h2>Alerts that keep chronic care on track.</h2>
-                  </div>
-                  <button className="secondary" onClick={() => logAction('Reminder schedule updated.')}>
-                    Configure reminders
-                  </button>
-                </div>
-                <div className="alert-grid">
-                  <div className="alert-card">
-                    <h3>Upcoming alerts</h3>
-                    <p>Plan for ARV, diabetic, hypertension, and maternal care follow-ups.</p>
-                    <div className="alert-list">
-                      {alerts.map((alert) => (
-                        <div className="alert-item" key={alert.title}>
-                          <div>
-                            <h4>{alert.title}</h4>
-                            <p>{alert.copy}</p>
-                          </div>
-                          <button className="ghost" onClick={() => logAction(`${alert.title} reminder sent.`)}>
-                            Send now
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="alert-card highlight">
-                    <h3>Care plan automation</h3>
-                    <ul>
-                      <li>Automatic reminders 14 and 3 days before refill dates.</li>
-                      <li>Pharmacy pre-notifications to prepare medicine packs.</li>
-                      <li>Follow-up checklists for ARV adherence and diabetic monitoring.</li>
-                      <li>Caregiver notifications when critical refills are due.</li>
-                    </ul>
-                    <button className="primary" onClick={() => logAction('Care plan automation enabled.')}>
-                      Enable my plan
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {activeView === 'support' && (
-              <section className="section">
-                <div className="section-header">
-                  <div>
-                    <p className="eyebrow">Support</p>
-                    <h2>We are here for patients, doctors, and caregivers.</h2>
-                  </div>
-                  <button className="primary" onClick={() => logAction('Support request created.')}>
-                    Open a ticket
-                  </button>
-                </div>
-                <div className="grid">
-                  {faqs.map((faq) => (
-                    <div className="card" key={faq.q}>
-                      <h3>{faq.q}</h3>
-                      <p>{faq.a}</p>
-                      <button className="text-button" onClick={() => logAction(`Help article opened: ${faq.q}`)}>
-                        Read article
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </section>
-
-          <aside className="side-panel">
-            <div className="panel-card">
-              <h3>Activity feed</h3>
-              <p className="muted">Demo actions appear here.</p>
-              <div className="activity-list">
-                {activity.map((item, index) => (
-                  <div className="activity-item" key={`${item.label}-${index}`}>
-                    <p>{item.label}</p>
-                    <span>{item.time}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="panel-card highlight">
-              <h3>Next refill</h3>
-              <p>ARV medication pack due in 12 days.</p>
-              <button className="primary" onClick={() => logAction('Refill reminder sent to pharmacy.')}>
-                Notify pharmacy
-              </button>
-            </div>
-            <div className="panel-card">
-              <h3>Quick actions</h3>
-              <div className="quick-actions">
-                <button className="secondary" onClick={() => logAction('Vitals submitted to care team.')}>
-                  Submit vitals
-                </button>
-                <button className="secondary" onClick={() => logAction('Caregiver added to your plan.')}>
-                  Add caregiver
-                </button>
-                <button className="secondary" onClick={() => logAction('Prescription uploaded.')}>
-                  Upload prescription
-                </button>
-              </div>
-            </div>
-          </aside>
-        </div>
-
-        <footer className="footer">
-          <div>
-            <h3>Doc Online</h3>
-            <p>Connected care for consultations, pharmacy access, and adherence reminders.</p>
-            <p className="footer-credit">Developed by Farai Zuva</p>
-          </div>
-          <div className="footer-links">
-            <div>
-              <h4>Platform</h4>
-              <button className="ghost">Consultations</button>
-              <button className="ghost">Pharmacy network</button>
-              <button className="ghost">Refill alerts</button>
-            </div>
-            <div>
-              <h4>Support</h4>
-              <button className="ghost">Help center</button>
-              <button className="ghost">Security</button>
-              <button className="ghost">Contact</button>
-            </div>
-            <div>
-              <h4>Social</h4>
-              <button className="ghost">LinkedIn</button>
-              <button className="ghost">Instagram</button>
-              <button className="ghost">Twitter</button>
-            </div>
-          </div>
-        </footer>
-      </main>
-
-      {isBookingOpen && (
-        <div className="modal-backdrop" onClick={() => setIsBookingOpen(false)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
+        {activeView === 'dashboard' && (
+          <section className="view-grid">
+            <div className="hero-panel">
               <div>
-                <h3>Book a consultation</h3>
-                <p className="muted">Fill out the form to request a slot.</p>
+                <span className="eyebrow">Care coordination</span>
+                <h2>Your care hub is ready.</h2>
+                <p>
+                  View your profile, providers, pharmacies, and care package from one clean dashboard.
+                </p>
               </div>
-              <button className="ghost" onClick={() => setIsBookingOpen(false)}>
-                Close
-              </button>
+              <div className="status-board">
+                <div>
+                  <strong>{activePatientCount}</strong>
+                  <span>Active patients</span>
+                </div>
+                <div>
+                  <strong>{activeDoctorCount}</strong>
+                  <span>Active doctors</span>
+                </div>
+                <div>
+                  <strong>{activePharmacyCount}</strong>
+                  <span>Active pharmacies</span>
+                </div>
+                <div>
+                  <strong>{activePackageCount}</strong>
+                  <span>Care packages</span>
+                </div>
+              </div>
             </div>
-            <form
-              className="form-grid"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setBookingSubmitted(true);
-                logAction('Consultation booking request sent.');
-              }}
-            >
-              <label>
-                Full name
-                <input required placeholder="e.g. Tariro Moyo" />
-              </label>
-              <label>
-                Reason for visit
-                <input required placeholder="Follow-up, refill, new symptoms" />
-              </label>
-              <label>
-                Preferred date
-                <input type="date" required />
-              </label>
-              <label>
-                Preferred time
-                <input type="time" required />
-              </label>
-              <label>
-                Consultation mode
-                <select required>
-                  <option value="">Select mode</option>
-                  <option>Video call</option>
-                  <option>Chat</option>
-                  <option>Phone call</option>
-                </select>
-              </label>
-              <label>
-                Upload files (optional)
-                <input type="file" />
-              </label>
-              <button className="primary" type="submit">
-                Send request
-              </button>
-              {bookingSubmitted && (
-                <p className="success">Thanks! We are confirming your slot and will send a notification.</p>
+
+            <div className="content-grid two">
+              <article className="panel">
+                <span className="eyebrow">Current account</span>
+                <h3>{user.name}</h3>
+                <p>{user.is_active ? 'Account active and authenticated.' : 'Account waiting for activation.'}</p>
+                <div className="detail-list">
+                  <div><span>Email</span><strong>{user.email}</strong></div>
+                  <div><span>Package</span><strong>{activePackage?.name ?? 'Not assigned'}</strong></div>
+                  <div><span>Package status</span><strong>{user.care_package_active ? 'Active' : 'Inactive'}</strong></div>
+                </div>
+              </article>
+
+              <article className="panel">
+                <span className="eyebrow">Activity</span>
+                <h3>Recent actions</h3>
+                <div className="activity-list">
+                  {activity.map((item) => (
+                    <div key={item}>{item}</div>
+                  ))}
+                </div>
+              </article>
+            </div>
+          </section>
+        )}
+
+        {activeView === 'profile' && (
+          <section className="content-grid two">
+            <article className="panel tall">
+              <span className="eyebrow">Protected endpoint</span>
+              <h2>Authenticated profile</h2>
+              <div className="profile-block">
+                <div className="avatar large">{initials(user.name)}</div>
+                <div>
+                  <h3>{user.name}</h3>
+                  <p>{user.email}</p>
+                  <span className="role-chip">{user.is_active ? 'Active account' : 'Inactive account'}</span>
+                </div>
+              </div>
+              <div className="detail-list">
+                <div><span>User ID</span><strong>#{user.id}</strong></div>
+                <div><span>Admin access</span><strong>{user.is_admin ? 'Yes' : 'No'}</strong></div>
+                <div><span>Care package</span><strong>{activePackage?.name ?? 'Not assigned'}</strong></div>
+                <div><span>Last activity</span><strong>{user.last_activity_at ? new Date(user.last_activity_at).toLocaleString() : 'Just now'}</strong></div>
+              </div>
+            </article>
+
+            <article className="panel tall">
+              <span className="eyebrow">Care package</span>
+              <h2>{activePackage?.name ?? 'No package assigned'}</h2>
+              <p>{activePackage?.description ?? 'An administrator can assign a care package from the Laravel admin portal.'}</p>
+              {activePackage?.features?.length ? (
+                <ul className="check-list">
+                  {activePackage.features.map((feature) => <li key={feature}>{feature}</li>)}
+                </ul>
+              ) : (
+                <EmptyState title="No package features" text="Package details will appear here after assignment." />
               )}
-            </form>
-          </div>
-        </div>
-      )}
-      </div>
-    </>
+            </article>
+          </section>
+        )}
+
+        {activeView === 'doctors' && (
+          <section className="section-stack">
+            <SectionHeading
+              kicker="Doctor directory"
+              title="Available doctors"
+              text="Choose a provider for your next care visit."
+            />
+            <div className="card-grid">
+              {doctors.map((doctor) => (
+                <article className="data-card" key={doctor.id}>
+                  <div className="avatar">{initials(doctor.name)}</div>
+                  <h3>{doctor.name}</h3>
+                  <p>{doctor.specialty ?? 'General Care'}</p>
+                  <div className="meta-row"><span>Email</span><strong>{doctor.email ?? 'Not provided'}</strong></div>
+                  <div className="meta-row"><span>Phone</span><strong>{doctor.phone ?? 'Not provided'}</strong></div>
+                  <p className="small-text">{doctor.bio}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeView === 'pharmacies' && (
+          <section className="section-stack">
+            <SectionHeading
+              kicker="Pharmacy directory"
+              title="Nearby pharmacies"
+              text="Check contact details, locations, and opening hours."
+            />
+            <div className="card-grid">
+              {pharmacies.map((pharmacy) => (
+                <article className="data-card" key={pharmacy.id}>
+                  <div className="map-tile"><span /></div>
+                  <h3>{pharmacy.name}</h3>
+                  <p>{pharmacy.address ?? 'Address not provided'}</p>
+                  <div className="meta-row"><span>Hours</span><strong>{pharmacy.hours ?? 'Not set'}</strong></div>
+                  <div className="meta-row"><span>Phone</span><strong>{pharmacy.phone ?? 'Not provided'}</strong></div>
+                  <div className="meta-row"><span>Email</span><strong>{pharmacy.email ?? 'Not provided'}</strong></div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeView === 'packages' && (
+          <section className="section-stack">
+            <SectionHeading
+              kicker="Care packages"
+              title="Available care packages"
+              text="Choose the care level that fits your needs."
+            />
+            <div className="package-grid">
+              {packages.map((pkg) => (
+                <article className={activePackage?.id === pkg.id ? 'package-card selected' : 'package-card'} key={pkg.id}>
+                  <div className="package-head">
+                    <div>
+                      <h3>{pkg.name}</h3>
+                      <p>{pkg.description}</p>
+                    </div>
+                    <strong>{money(pkg.price)}</strong>
+                  </div>
+                  <ul className="check-list">
+                    {(pkg.features ?? []).map((feature) => <li key={feature}>{feature}</li>)}
+                  </ul>
+                  {activePackage?.id === pkg.id && <span className="selected-pill">Assigned to you</span>}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeView === 'patients' && (
+          <section className="section-stack">
+            <SectionHeading
+              kicker="Active patients"
+              title="Patient list"
+              text="View active patient accounts and assigned packages."
+            />
+            <div className="table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Care package</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patients.map((patient) => (
+                    <tr key={patient.id}>
+                      <td>{patient.name}</td>
+                      <td>{patient.email}</td>
+                      <td>{patient.care_package?.name ?? 'Not assigned'}</td>
+                      <td><span className="role-chip">{patient.is_active ? 'Active' : 'Inactive'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {activeView === 'roadmap' && (
+          <section className="section-stack">
+            <SectionHeading
+              kicker="Future modules"
+              title="Coming next"
+              text="More helpful tools for booking, pharmacy search, and reminders."
+            />
+            <div className="card-grid">
+              {roadmap.map((item) => (
+                <article className="data-card feature-card" key={item.title}>
+                  <span className="role-chip admin">{item.status}</span>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => addActivity(`${item.title} workflow preview opened.`)}
+                  >
+                    Preview workflow
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function SectionHeading({ kicker, title, text }) {
+  return (
+    <div className="section-heading">
+      <span className="eyebrow">{kicker}</span>
+      <h2>{title}</h2>
+      <p>{text}</p>
+    </div>
   );
 }
