@@ -12,6 +12,7 @@ const roleAccounts = {
 const navByRole = {
   patient: [
     { id: 'overview', label: 'Overview' },
+    { id: 'assistant', label: 'CareGuide AI' },
     { id: 'bookings', label: 'Bookings' },
     { id: 'pharmacies', label: 'Pharmacies' },
     { id: 'reminders', label: 'Reminders' },
@@ -19,6 +20,7 @@ const navByRole = {
   ],
   doctor: [
     { id: 'overview', label: 'Overview' },
+    { id: 'availability', label: 'Availability' },
     { id: 'bookings', label: 'Bookings' },
     { id: 'records', label: 'Patient Records' },
   ],
@@ -131,10 +133,138 @@ function PageLoader({ active, message }) {
   );
 }
 
+function CareGuideChat({
+  compact = false,
+  messages,
+  input,
+  typing,
+  setInput,
+  submitMessage,
+  openBooking,
+  onClose,
+}) {
+  return (
+    <article className={compact ? 'assistant-panel compact' : 'assistant-panel'}>
+      <div className="assistant-header">
+        <div>
+          <span className="eyebrow">CareGuide AI</span>
+          <h2>Patient support assistant</h2>
+          <p>Focused on doctor availability, your reminders, booking handoff, and care tips from your portal data.</p>
+        </div>
+        <div className="assistant-header-actions">
+          <span className="assistant-status">Professional mode</span>
+          {compact && <button className="chat-close-button" type="button" aria-label="Close CareGuide" onClick={onClose}>x</button>}
+        </div>
+      </div>
+
+      <div className="assistant-messages" aria-live="polite">
+        {messages.map((message) => (
+          <div className={`chat-message ${message.author}`} key={message.id}>
+            <div className="chat-bubble">
+              <p>{message.text}</p>
+              {!!message.actions?.length && (
+                <div className="chat-actions">
+                  {message.actions.map((action) => (
+                    <button
+                      className="secondary-button"
+                      key={`${message.id}-${action.doctor.id}`}
+                      type="button"
+                      onClick={() => openBooking(action.doctor)}
+                    >
+                      Book {action.doctor.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        {typing && (
+          <div className="chat-message assistant">
+            <div className="typing-bubble" aria-label="CareGuide is typing">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="assistant-prompts">
+        {[
+          'Which doctors are available?',
+          'Do I have reminders today?',
+          'Give me a care tip from my stats',
+        ].map((prompt) => (
+          <button className="ghost-button" key={prompt} type="button" onClick={(event) => submitMessage(event, prompt)}>
+            {prompt}
+          </button>
+        ))}
+      </div>
+
+      <form className="assistant-composer" onSubmit={submitMessage}>
+        <input
+          aria-label="Message CareGuide"
+          placeholder="Ask about doctors, reminders, bookings, or your care stats"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+        />
+        <button className="primary-button" type="submit" disabled={typing}>Send</button>
+      </form>
+    </article>
+  );
+}
+
+function CareGuideLauncher({
+  open,
+  setOpen,
+  messages,
+  input,
+  typing,
+  setInput,
+  submitMessage,
+  openBooking,
+}) {
+  return (
+    <div className="careguide-live">
+      {open && (
+        <div className="careguide-popover">
+          <CareGuideChat
+            compact
+            messages={messages}
+            input={input}
+            typing={typing}
+            setInput={setInput}
+            submitMessage={submitMessage}
+            openBooking={openBooking}
+            onClose={() => setOpen(false)}
+          />
+        </div>
+      )}
+      <button
+        className={`careguide-launcher ${open ? 'open' : ''}`}
+        type="button"
+        aria-label={open ? 'Close CareGuide AI chat' : 'Open CareGuide AI chat'}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="launcher-icon">CG</span>
+        <span className="launcher-pulse" />
+      </button>
+      {!open && (
+        <div className="careguide-nudge">
+          <strong>CareGuide AI</strong>
+          <span>Ready to assist</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('doconline_token') ?? '');
   const [selectedRole, setSelectedRole] = useState(localStorage.getItem('doconline_role') ?? 'patient');
   const [authForm, setAuthForm] = useState(roleAccounts[selectedRole]);
+  const [authMode, setAuthMode] = useState('login');
   const [user, setUser] = useState(null);
   const [portal, setPortal] = useState(null);
   const [activeView, setActiveView] = useState('overview');
@@ -147,6 +277,17 @@ export default function App() {
   const [loaderMessage, setLoaderMessage] = useState('Contacting backend...');
   const [locationNotice, setLocationNotice] = useState('Use your current location to sort pharmacies by distance.');
   const [locationAddress, setLocationAddress] = useState('');
+  const [assistantMessages, setAssistantMessages] = useState([
+    {
+      id: 'welcome',
+      author: 'assistant',
+      text: 'I am CareGuide. I can check doctor availability, summarize your reminders, and give care tips from your portal data.',
+      actions: [],
+    },
+  ]);
+  const [assistantInput, setAssistantInput] = useState('');
+  const [assistantTyping, setAssistantTyping] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(true);
   const [bookingForm, setBookingForm] = useState({
     doctor_id: '',
     scheduled_for: '',
@@ -169,6 +310,23 @@ export default function App() {
     longitude: '',
     phone: '',
     hours: '',
+  });
+  const [availabilityForm, setAvailabilityForm] = useState({
+    is_available: true,
+    available_from_date: '',
+    available_to_date: '',
+    available_start_time: '',
+    available_end_time: '',
+    availability_note: '',
+  });
+  const [registerForm, setRegisterForm] = useState({
+    role: 'patient',
+    name: '',
+    email: '',
+    password: '',
+    specialty: '',
+    phone: '',
+    bio: '',
   });
 
   const role = portal?.role ?? user?.role ?? selectedRole;
@@ -257,6 +415,17 @@ export default function App() {
         });
       }
 
+      if (data.role === 'doctor' && data.doctor) {
+        setAvailabilityForm({
+          is_available: Boolean(data.doctor.is_available ?? true),
+          available_from_date: dateInputValue(data.doctor.available_from_date),
+          available_to_date: dateInputValue(data.doctor.available_to_date),
+          available_start_time: timeInputValue(data.doctor.available_start_time),
+          available_end_time: timeInputValue(data.doctor.available_end_time),
+          availability_note: data.doctor.availability_note ?? '',
+        });
+      }
+
       if (!silent) {
         showToast('success', 'Dashboard refreshed', 'Latest portal data loaded.');
       }
@@ -279,6 +448,7 @@ export default function App() {
   const selectRole = (newRole) => {
     setSelectedRole(newRole);
     setAuthForm(roleAccounts[newRole]);
+    setAuthMode('login');
     setError('');
     setNotice('');
   };
@@ -311,6 +481,46 @@ export default function App() {
     } catch (err) {
       setError(err.message);
       showToast('error', 'Sign in failed', err.message);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const register = async (event) => {
+    event.preventDefault();
+    setAuthBusy(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const data = await apiFetch('/api/register', {
+        method: 'POST',
+        body: JSON.stringify(registerForm),
+        headers: { Authorization: '' },
+        requestLabel: 'Creating your account...',
+      });
+
+      setNotice(data.message ?? 'Account created. Awaiting admin activation.');
+      showToast('success', 'Registration submitted', data.message ?? 'Admin activation is required before login.');
+      setAuthMode('login');
+      setSelectedRole(registerForm.role);
+      setAuthForm({
+        ...roleAccounts[registerForm.role],
+        email: registerForm.email,
+        password: '',
+      });
+      setRegisterForm({
+        role: registerForm.role,
+        name: '',
+        email: '',
+        password: '',
+        specialty: '',
+        phone: '',
+        bio: '',
+      });
+    } catch (err) {
+      setError(err.message);
+      showToast('error', 'Registration failed', err.message);
     } finally {
       setAuthBusy(false);
     }
@@ -384,6 +594,57 @@ export default function App() {
   const updatePharmacy = async (event) => {
     event.preventDefault();
     await postAction('/api/portal/pharmacy', pharmacyForm, 'Pharmacy location updated.', 'PATCH');
+  };
+
+  const updateDoctorAvailability = async (event) => {
+    event.preventDefault();
+    await postAction('/api/portal/doctor/availability', availabilityForm, 'Doctor availability updated.', 'PATCH');
+  };
+
+  const openBookingFromAssistant = (doctor) => {
+    const scheduledFor = nextBookingDateTime(doctor);
+
+    setBookingForm((form) => ({
+      ...form,
+      doctor_id: String(doctor.id),
+      scheduled_for: scheduledFor,
+      reason: form.reason || `Booking requested after CareGuide availability check with ${doctor.name}.`,
+    }));
+    setActiveView('bookings');
+    showToast('success', 'Booking form prepared', `${doctor.name} is selected with the next available time.`);
+  };
+
+  const submitAssistantMessage = (event, quickPrompt = '') => {
+    event?.preventDefault();
+
+    const prompt = (quickPrompt || assistantInput).trim();
+    if (!prompt || assistantTyping) return;
+
+    const patientMessage = {
+      id: `${Date.now()}-patient`,
+      author: 'patient',
+      text: prompt,
+      actions: [],
+    };
+
+    setAssistantInput('');
+    setAssistantMessages((messages) => [...messages, patientMessage]);
+    setAssistantTyping(true);
+
+    const response = buildCareGuideResponse(prompt, portal);
+    const delay = Math.min(2200, Math.max(900, response.text.length * 16));
+
+    window.setTimeout(() => {
+      setAssistantMessages((messages) => [
+        ...messages,
+        {
+          id: `${Date.now()}-assistant`,
+          author: 'assistant',
+          ...response,
+        },
+      ]);
+      setAssistantTyping(false);
+    }, delay);
   };
 
   const applyPharmacyDistances = (currentLat, currentLng, sourceLabel) => {
@@ -514,50 +775,97 @@ export default function App() {
           <section className="auth-card">
             <div className="card-heading">
               <div>
-                <span className="eyebrow">Login</span>
-                <h2>{roleAccounts[selectedRole].label} access</h2>
+                <span className="eyebrow">{authMode === 'login' ? 'Login' : 'Register'}</span>
+                <h2>{authMode === 'login' ? `${roleAccounts[selectedRole].label} access` : 'Create account'}</h2>
               </div>
             </div>
 
-            <div className="demo-row">
-              {Object.entries(roleAccounts).map(([key, account]) => (
-                <button className={selectedRole === key ? 'selected-demo' : ''} key={key} type="button" onClick={() => selectRole(key)}>
-                  {account.label}
-                </button>
-              ))}
+            <div className="auth-mode-row">
+              <button className={authMode === 'login' ? 'selected-demo' : ''} type="button" onClick={() => setAuthMode('login')}>Log in</button>
+              <button className={authMode === 'register' ? 'selected-demo' : ''} type="button" onClick={() => setAuthMode('register')}>Register</button>
             </div>
 
-            <form className="form-stack" onSubmit={login}>
-              <Field label="Email address">
-                <input
-                  type="email"
-                  value={authForm.email}
-                  onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
-                  required
-                />
-              </Field>
-              <Field label="Password">
-                <input
-                  type="password"
-                  value={authForm.password}
-                  onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
-                  minLength={8}
-                  required
-                />
-              </Field>
-              <button className="primary-button" type="submit" disabled={authBusy}>
-                {authBusy ? 'Checking...' : `Log in as ${roleAccounts[selectedRole].label}`}
-              </button>
-            </form>
+            {authMode === 'login' && (
+              <>
+                <div className="demo-row">
+                  {Object.entries(roleAccounts).map(([key, account]) => (
+                    <button className={selectedRole === key ? 'selected-demo' : ''} key={key} type="button" onClick={() => selectRole(key)}>
+                      {account.label}
+                    </button>
+                  ))}
+                </div>
+
+                <form className="form-stack" onSubmit={login}>
+                  <Field label="Email address">
+                    <input
+                      type="email"
+                      value={authForm.email}
+                      onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
+                      required
+                    />
+                  </Field>
+                  <Field label="Password">
+                    <input
+                      type="password"
+                      value={authForm.password}
+                      onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
+                      minLength={8}
+                      required
+                    />
+                  </Field>
+                  <button className="primary-button" type="submit" disabled={authBusy}>
+                    {authBusy ? 'Checking...' : `Log in as ${roleAccounts[selectedRole].label}`}
+                  </button>
+                </form>
+              </>
+            )}
+
+            {authMode === 'register' && (
+              <form className="form-stack" onSubmit={register}>
+                <Field label="Account type">
+                  <select value={registerForm.role} onChange={(event) => setRegisterForm({ ...registerForm, role: event.target.value })}>
+                    <option value="patient">Patient</option>
+                    <option value="doctor">Doctor</option>
+                  </select>
+                </Field>
+                <Field label="Full name">
+                  <input value={registerForm.name} onChange={(event) => setRegisterForm({ ...registerForm, name: event.target.value })} required />
+                </Field>
+                <Field label="Email address">
+                  <input type="email" value={registerForm.email} onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })} required />
+                </Field>
+                <Field label="Password">
+                  <input type="password" value={registerForm.password} onChange={(event) => setRegisterForm({ ...registerForm, password: event.target.value })} minLength={8} required />
+                </Field>
+                {registerForm.role === 'doctor' && (
+                  <>
+                    <Field label="Specialty">
+                      <input value={registerForm.specialty} onChange={(event) => setRegisterForm({ ...registerForm, specialty: event.target.value })} required />
+                    </Field>
+                    <Field label="Phone for SMS alerts">
+                      <input value={registerForm.phone} onChange={(event) => setRegisterForm({ ...registerForm, phone: event.target.value })} required />
+                    </Field>
+                    <Field label="Bio">
+                      <textarea value={registerForm.bio} onChange={(event) => setRegisterForm({ ...registerForm, bio: event.target.value })} rows="3" />
+                    </Field>
+                  </>
+                )}
+                <button className="primary-button" type="submit" disabled={authBusy}>
+                  {authBusy ? 'Submitting...' : 'Submit registration'}
+                </button>
+              </form>
+            )}
 
             {error && <p className="message error-message">{error}</p>}
             {notice && <p className="message success-message">{notice}</p>}
 
-            <div className="credential-card">
-              <span>Demo account</span>
-              <strong>{roleAccounts[selectedRole].email}</strong>
-              <code>{roleAccounts[selectedRole].password}</code>
-            </div>
+            {authMode === 'login' && (
+              <div className="credential-card">
+                <span>Demo account</span>
+                <strong>{roleAccounts[selectedRole].email}</strong>
+                <code>{roleAccounts[selectedRole].password}</code>
+              </div>
+            )}
           </section>
         </main>
         <PageLoader active={pendingRequests > 0 || authBusy} message={loaderMessage} />
@@ -621,6 +929,12 @@ export default function App() {
             portal={portal}
             bookingForm={bookingForm}
             setBookingForm={setBookingForm}
+            assistantMessages={assistantMessages}
+            assistantInput={assistantInput}
+            assistantTyping={assistantTyping}
+            setAssistantInput={setAssistantInput}
+            submitAssistantMessage={submitAssistantMessage}
+            openBookingFromAssistant={openBookingFromAssistant}
             reminderForm={reminderForm}
             setReminderForm={setReminderForm}
             submitBooking={submitBooking}
@@ -635,7 +949,15 @@ export default function App() {
           />
         )}
 
-        {role === 'doctor' && <DoctorPortal activeView={activeView} portal={portal} />}
+        {role === 'doctor' && (
+          <DoctorPortal
+            activeView={activeView}
+            portal={portal}
+            availabilityForm={availabilityForm}
+            setAvailabilityForm={setAvailabilityForm}
+            updateDoctorAvailability={updateDoctorAvailability}
+          />
+        )}
 
         {role === 'pharmacy' && (
           <PharmacyPortal
@@ -649,6 +971,18 @@ export default function App() {
         </main>
       </div>
       <PageLoader active={pendingRequests > 0 || loading} message={loaderMessage} />
+      {role === 'patient' && (
+        <CareGuideLauncher
+          open={assistantOpen}
+          setOpen={setAssistantOpen}
+          messages={assistantMessages}
+          input={assistantInput}
+          typing={assistantTyping}
+          setInput={setAssistantInput}
+          submitMessage={submitAssistantMessage}
+          openBooking={openBookingFromAssistant}
+        />
+      )}
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
     </>
   );
@@ -659,6 +993,12 @@ function PatientPortal({
   portal,
   bookingForm,
   setBookingForm,
+  assistantMessages,
+  assistantInput,
+  assistantTyping,
+  setAssistantInput,
+  submitAssistantMessage,
+  openBookingFromAssistant,
   reminderForm,
   setReminderForm,
   submitBooking,
@@ -677,6 +1017,32 @@ function PatientPortal({
   const bookings = portal?.bookings ?? [];
   const reminders = portal?.reminders ?? [];
   const records = portal?.records ?? [];
+
+  if (activeView === 'assistant') {
+    return (
+      <section className="assistant-layout">
+        <CareGuideChat
+          messages={assistantMessages}
+          input={assistantInput}
+          typing={assistantTyping}
+          setInput={setAssistantInput}
+          submitMessage={submitAssistantMessage}
+          openBooking={openBookingFromAssistant}
+        />
+
+        <aside className="assistant-context panel">
+          <span className="eyebrow">Live data</span>
+          <h3>What CareGuide can read</h3>
+          <div className="detail-list">
+            <div><span>Doctors</span><strong>{doctors.length}</strong></div>
+            <div><span>Available now</span><strong>{doctors.filter(isDoctorAvailable).length}</strong></div>
+            <div><span>Reminders</span><strong>{reminders.length}</strong></div>
+            <div><span>Low stock</span><strong>{reminders.filter(needsRefill).length}</strong></div>
+          </div>
+        </aside>
+      </section>
+    );
+  }
 
   if (activeView === 'overview') {
     return (
@@ -882,10 +1248,11 @@ function PatientPortal({
   );
 }
 
-function DoctorPortal({ activeView, portal }) {
+function DoctorPortal({ activeView, portal, availabilityForm, setAvailabilityForm, updateDoctorAvailability }) {
   const stats = portal?.stats ?? {};
   const bookings = portal?.bookings ?? [];
   const records = portal?.records ?? [];
+  const doctor = portal?.doctor;
 
   if (activeView === 'overview') {
     return (
@@ -917,6 +1284,57 @@ function DoctorPortal({ activeView, portal }) {
             <Bar label="Average adherence" value={stats.average_adherence} tone="blue" />
           </article>
         </div>
+      </section>
+    );
+  }
+
+  if (activeView === 'availability') {
+    return (
+      <section className="content-grid two">
+        <article className="panel">
+          <SectionHeading kicker="Booking availability" title="Set patient booking window" text="CareGuide and the patient booking flow use this status to explain when you can be booked." />
+          <form className="form-stack" onSubmit={updateDoctorAvailability}>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={availabilityForm.is_available}
+                onChange={(event) => setAvailabilityForm({ ...availabilityForm, is_available: event.target.checked })}
+              />
+              <span>Available for patient bookings</span>
+            </label>
+            <div className="form-two">
+              <Field label="Available from">
+                <input type="date" value={availabilityForm.available_from_date} onChange={(event) => setAvailabilityForm({ ...availabilityForm, available_from_date: event.target.value })} />
+              </Field>
+              <Field label="Available to">
+                <input type="date" value={availabilityForm.available_to_date} onChange={(event) => setAvailabilityForm({ ...availabilityForm, available_to_date: event.target.value })} />
+              </Field>
+            </div>
+            <div className="form-two">
+              <Field label="Start time">
+                <input type="time" value={availabilityForm.available_start_time} onChange={(event) => setAvailabilityForm({ ...availabilityForm, available_start_time: event.target.value })} />
+              </Field>
+              <Field label="End time">
+                <input type="time" value={availabilityForm.available_end_time} onChange={(event) => setAvailabilityForm({ ...availabilityForm, available_end_time: event.target.value })} />
+              </Field>
+            </div>
+            <Field label="Availability note">
+              <input value={availabilityForm.availability_note} onChange={(event) => setAvailabilityForm({ ...availabilityForm, availability_note: event.target.value })} placeholder="Example: Weekdays only, emergency slots in the morning" />
+            </Field>
+            <button className="primary-button" type="submit">Save availability</button>
+          </form>
+        </article>
+
+        <article className="data-card">
+          <span className="eyebrow">Current status</span>
+          <h3>{doctor?.name}</h3>
+          <p>{doctorAvailabilityText(doctor)}</p>
+          <div className="detail-list">
+            <div><span>Specialty</span><strong>{doctor?.specialty ?? 'Not set'}</strong></div>
+            <div><span>Status</span><strong>{isDoctorAvailable(doctor) ? 'Available' : 'Unavailable'}</strong></div>
+            <div><span>Note</span><strong>{doctor?.availability_note ?? 'None'}</strong></div>
+          </div>
+        </article>
       </section>
     );
   }
@@ -1081,6 +1499,196 @@ function RecordTable({ rows, columns }) {
       </table>
     </div>
   );
+}
+
+function buildCareGuideResponse(prompt, portal) {
+  const doctors = portal?.doctors ?? [];
+  const reminders = portal?.reminders ?? [];
+  const records = portal?.records ?? [];
+  const stats = portal?.stats ?? {};
+  const query = prompt.toLowerCase();
+
+  if (!portal) {
+    return {
+      text: 'I need your dashboard data before I can answer. Refresh the portal and ask again.',
+      actions: [],
+    };
+  }
+
+  if (/(doctor|doc|available|availability|book|appointment|specialist|specialty)/.test(query)) {
+    const matchingDoctor = doctors.find((doctor) => {
+      const name = String(doctor.name ?? '').toLowerCase();
+      const specialty = String(doctor.specialty ?? '').toLowerCase();
+      return name && (query.includes(name) || name.split(' ').some((part) => part.length > 3 && query.includes(part)) || (specialty && query.includes(specialty)));
+    });
+    const candidates = matchingDoctor ? [matchingDoctor] : doctors;
+    const bookable = candidates.filter(isDoctorBookable);
+
+    if (!doctors.length) {
+      return {
+        text: 'I do not see active doctors in the portal yet. Please check again after the clinic updates the doctor directory.',
+        actions: [],
+      };
+    }
+
+    if (!bookable.length) {
+      return {
+        text: matchingDoctor
+          ? `${matchingDoctor.name} is currently marked unavailable. ${doctorAvailabilityText(matchingDoctor)}`
+          : 'No doctors are marked available for booking right now. I can still help you check reminders or prepare once availability is updated.',
+        actions: [],
+      };
+    }
+
+    const summary = bookable
+      .slice(0, 4)
+      .map((doctor) => `${doctor.name} (${doctor.specialty ?? 'general care'}): ${doctorAvailabilityText(doctor)}`)
+      .join(' ');
+
+    return {
+      text: `${matchingDoctor ? 'I checked that doctor.' : 'I checked the live doctor list.'} ${summary}`,
+      actions: bookable.slice(0, 3).map((doctor) => ({ type: 'book', doctor })),
+    };
+  }
+
+  if (/(reminder|medicine|medication|dose|refill|stock|tablet|pill)/.test(query)) {
+    if (!reminders.length) {
+      return {
+        text: 'You do not have medication reminders on this account yet. Add one from Reminders so I can track stock and refill timing for you.',
+        actions: [],
+      };
+    }
+
+    const urgent = reminders.filter(needsRefill);
+    const scheduled = reminders.filter((reminder) => reminder.remind_at).slice(0, 3);
+    const urgentText = urgent.length
+      ? `${urgent.length} reminder${urgent.length === 1 ? '' : 's'} need attention: ${urgent.map((item) => item.medicine_name).join(', ')}.`
+      : 'No medication is currently flagged for refill.';
+    const scheduleText = scheduled.length
+      ? ` Scheduled reminders: ${scheduled.map((item) => `${item.medicine_name} at ${timeInputValue(item.remind_at)}`).join(', ')}.`
+      : ' No reminder times are set yet.';
+
+    return {
+      text: `${urgentText}${scheduleText}`,
+      actions: [],
+    };
+  }
+
+  if (/(tip|advice|stats|progress|health|care|summary)/.test(query)) {
+    const lowStock = reminders.filter(needsRefill).length;
+    const progress = Number(stats.progress_average ?? 0);
+    const latestRecord = records[0];
+    const tips = [];
+
+    if (lowStock) {
+      tips.push(`You have ${lowStock} low-stock medicine item${lowStock === 1 ? '' : 's'}, so refill planning should be handled before booking delays become a problem.`);
+    }
+
+    if (progress > 0 && progress < 60) {
+      tips.push(`Your average progress is ${progress}%, so ask your doctor to review the treatment plan at your next visit.`);
+    } else if (progress >= 60) {
+      tips.push(`Your average progress is ${progress}%; keep your reminder routine consistent and report any medication effects.`);
+    }
+
+    if (latestRecord?.medication_effects) {
+      tips.push(`Your latest record mentions medication effects. Keep that detail ready for the doctor when booking.`);
+    }
+
+    return {
+      text: tips.length
+        ? tips.join(' ')
+        : 'Your portal does not show enough trend data for a specific care tip yet. Keep reminders updated and record symptoms clearly before appointments.',
+      actions: [],
+    };
+  }
+
+  return {
+    text: 'I can help with doctor availability, booking handoff, medication reminders, refill status, and care tips from your portal stats. I cannot answer topics outside Doc Online patient support.',
+    actions: [],
+  };
+}
+
+function isDoctorBookable(doctor) {
+  return doctor?.is_active !== false && doctor?.is_available !== false;
+}
+
+function isDoctorAvailable(doctor) {
+  if (!isDoctorBookable(doctor)) return false;
+
+  const today = startOfToday();
+  const from = parseDateOnly(doctor.available_from_date);
+  const to = parseDateOnly(doctor.available_to_date);
+
+  if (from && from > today) return false;
+  if (to && to < today) return false;
+
+  return true;
+}
+
+function doctorAvailabilityText(doctor) {
+  if (!doctor) return 'Availability has not been set.';
+  if (doctor.is_available === false) return 'Marked unavailable for patient bookings.';
+
+  const from = formatCareDate(doctor.available_from_date);
+  const to = formatCareDate(doctor.available_to_date);
+  const start = timeInputValue(doctor.available_start_time);
+  const end = timeInputValue(doctor.available_end_time);
+  const dateText = from && to ? `${from} to ${to}` : from ? `from ${from}` : to ? `until ${to}` : 'open dates';
+  const timeText = start && end ? `${start} to ${end}` : start ? `from ${start}` : end ? `until ${end}` : 'times not restricted';
+  const note = doctor.availability_note ? ` Note: ${doctor.availability_note}.` : '';
+
+  return `Available ${dateText}, ${timeText}.${note}`;
+}
+
+function nextBookingDateTime(doctor) {
+  const now = new Date();
+  const from = parseDateOnly(doctor.available_from_date);
+  const selected = from && from > startOfToday() ? from : new Date(now);
+  const [hour, minute] = timeInputValue(doctor.available_start_time)
+    ? timeInputValue(doctor.available_start_time).split(':').map(Number)
+    : [now.getHours() + 1, 0];
+
+  selected.setHours(hour, minute, 0, 0);
+
+  if (selected <= now) {
+    selected.setHours(now.getHours() + 1, 0, 0, 0);
+  }
+
+  return toDateTimeLocalValue(selected);
+}
+
+function dateInputValue(value) {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+}
+
+function timeInputValue(value) {
+  if (!value) return '';
+  return String(value).slice(0, 5);
+}
+
+function parseDateOnly(value) {
+  const input = dateInputValue(value);
+  if (!input) return null;
+
+  const date = new Date(`${input}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function startOfToday() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function formatCareDate(value) {
+  const date = parseDateOnly(value);
+  return date ? date.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+}
+
+function toDateTimeLocalValue(date) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function distanceKm(lat1, lon1, lat2, lon2) {
