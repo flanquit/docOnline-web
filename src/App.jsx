@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -94,6 +94,43 @@ function Bar({ label, value, tone = 'green' }) {
   );
 }
 
+function ToastViewport({ toasts, onDismiss }) {
+  return (
+    <div className="toast-viewport" aria-live="polite" aria-label="Notifications">
+      {toasts.map((toast) => (
+        <div className={`toast-card ${toast.type}`} key={toast.id}>
+          <span className="toast-dot" />
+          <div>
+            <strong>{toast.title}</strong>
+            {toast.text && <p>{toast.text}</p>}
+          </div>
+          <button type="button" aria-label="Dismiss notification" onClick={() => onDismiss(toast.id)}>x</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PageLoader({ active, message }) {
+  if (!active) return null;
+
+  return (
+    <div className="page-loader" role="status" aria-live="polite">
+      <div className="loader-panel">
+        <div className="loader-mark">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div>
+          <strong>{message}</strong>
+          <p>Please wait while Doc Online completes the request.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('doconline_token') ?? '');
   const [selectedRole, setSelectedRole] = useState(localStorage.getItem('doconline_role') ?? 'patient');
@@ -105,7 +142,11 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [toasts, setToasts] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState(0);
+  const [loaderMessage, setLoaderMessage] = useState('Contacting backend...');
   const [locationNotice, setLocationNotice] = useState('Use your current location to sort pharmacies by distance.');
+  const [locationAddress, setLocationAddress] = useState('');
   const [bookingForm, setBookingForm] = useState({
     doctor_id: '',
     scheduled_for: '',
@@ -134,40 +175,70 @@ export default function App() {
   const navigation = navByRole[role] ?? navByRole.patient;
   const title = navigation.find((item) => item.id === activeView)?.label ?? 'Overview';
 
+  const dismissToast = useCallback((id) => {
+    setToasts((items) => items.filter((toast) => toast.id !== id));
+  }, []);
+
+  const showToast = useCallback((type, title, text = '') => {
+    const id = `${Date.now()}-${Math.random()}`;
+
+    setToasts((items) => [{ id, type, title, text }, ...items].slice(0, 4));
+    window.setTimeout(() => {
+      setToasts((items) => items.filter((toast) => toast.id !== id));
+    }, 4600);
+  }, []);
+
+  const startRequest = useCallback((message) => {
+    setLoaderMessage(message);
+    setPendingRequests((count) => count + 1);
+  }, []);
+
+  const finishRequest = useCallback(() => {
+    setPendingRequests((count) => Math.max(0, count - 1));
+  }, []);
+
   const apiFetch = useCallback(async (path, options = {}) => {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: {
-        Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers ?? {}),
-      },
-    });
+    const { requestLabel = 'Contacting backend...', ...fetchOptions } = options;
 
-    const data = await response.json().catch(() => ({}));
+    startRequest(requestLabel);
 
-    if (!response.ok) {
-      const message =
-        data.message ||
-        Object.values(data.errors ?? {})
-          .flat()
-          .join(' ') ||
-        'Request failed.';
-      throw new Error(message);
+    try {
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...fetchOptions,
+        headers: {
+          Accept: 'application/json',
+          ...(fetchOptions.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(fetchOptions.headers ?? {}),
+        },
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message =
+          data.message ||
+          Object.values(data.errors ?? {})
+            .flat()
+            .join(' ') ||
+          'Request failed.';
+        throw new Error(message);
+      }
+
+      return data;
+    } finally {
+      finishRequest();
     }
+  }, [finishRequest, startRequest, token]);
 
-    return data;
-  }, [token]);
-
-  const loadPortal = useCallback(async () => {
+  const loadPortal = useCallback(async ({ silent = false } = {}) => {
     if (!token) return;
 
     setLoading(true);
     setError('');
 
     try {
-      const data = await apiFetch('/api/portal/dashboard');
+      const data = await apiFetch('/api/portal/dashboard', { requestLabel: 'Loading your dashboard...' });
       setPortal(data);
       setUser(data.user);
       setActiveView((view) => (navByRole[data.role] ?? []).some((item) => item.id === view) ? view : 'overview');
@@ -185,8 +256,13 @@ export default function App() {
           hours: data.pharmacy.hours ?? '',
         });
       }
+
+      if (!silent) {
+        showToast('success', 'Dashboard refreshed', 'Latest portal data loaded.');
+      }
     } catch (err) {
       setError(err.message);
+      showToast('error', 'Dashboard request failed', err.message);
       localStorage.removeItem('doconline_token');
       setToken('');
       setUser(null);
@@ -194,10 +270,10 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [apiFetch, bookingForm.doctor_id, token]);
+  }, [apiFetch, bookingForm.doctor_id, showToast, token]);
 
   useEffect(() => {
-    loadPortal();
+    loadPortal({ silent: true });
   }, [loadPortal]);
 
   const selectRole = (newRole) => {
@@ -218,6 +294,7 @@ export default function App() {
         method: 'POST',
         body: JSON.stringify({ email: authForm.email, password: authForm.password }),
         headers: { Authorization: '' },
+        requestLabel: 'Signing you in...',
       });
 
       if (data.user.role !== selectedRole) {
@@ -230,8 +307,10 @@ export default function App() {
       setUser(data.user);
       setSelectedRole(data.user.role);
       setNotice(`${roleAccounts[data.user.role].label} logged in.`);
+      showToast('success', 'Signed in', `${roleAccounts[data.user.role].label} dashboard is opening.`);
     } catch (err) {
       setError(err.message);
+      showToast('error', 'Sign in failed', err.message);
     } finally {
       setAuthBusy(false);
     }
@@ -240,10 +319,11 @@ export default function App() {
   const logout = async () => {
     try {
       if (token) {
-        await apiFetch('/api/logout', { method: 'POST' });
+        await apiFetch('/api/logout', { method: 'POST', requestLabel: 'Signing you out...' });
       }
     } catch {
       setNotice('Logged out locally.');
+      showToast('warning', 'Logged out locally', 'The backend did not confirm logout.');
     }
 
     localStorage.removeItem('doconline_token');
@@ -251,37 +331,54 @@ export default function App() {
     setUser(null);
     setPortal(null);
     setActiveView('overview');
+    showToast('success', 'Signed out', 'Your local session has been cleared.');
   };
 
   const postAction = async (path, payload, successMessage, method = 'POST') => {
     setError('');
     setNotice('');
-    await apiFetch(path, {
-      method,
-      body: JSON.stringify(payload ?? {}),
-    });
-    setNotice(successMessage);
-    await loadPortal();
+
+    try {
+      await apiFetch(path, {
+        method,
+        body: JSON.stringify(payload ?? {}),
+        requestLabel: 'Saving your changes...',
+      });
+      setNotice(successMessage);
+      showToast('success', 'Request completed', successMessage);
+      await loadPortal({ silent: true });
+      return true;
+    } catch (err) {
+      setError(err.message);
+      showToast('error', 'Request failed', err.message);
+      return false;
+    }
   };
 
   const submitBooking = async (event) => {
     event.preventDefault();
-    await postAction('/api/portal/bookings', bookingForm, 'Booking request sent.');
-    setBookingForm((form) => ({ ...form, scheduled_for: '', reason: '', symptoms: '' }));
+    const saved = await postAction('/api/portal/bookings', bookingForm, 'Booking request sent.');
+
+    if (saved) {
+      setBookingForm((form) => ({ ...form, scheduled_for: '', reason: '', symptoms: '' }));
+    }
   };
 
   const submitReminder = async (event) => {
     event.preventDefault();
-    await postAction('/api/portal/medication-reminders', reminderForm, 'Medicine reminder added.');
-    setReminderForm({
-      medicine_name: '',
-      dosage: '',
-      doses_per_day: 1,
-      quantity_total: 30,
-      quantity_remaining: '',
-      refill_at: '',
-      remind_at: '',
-    });
+    const saved = await postAction('/api/portal/medication-reminders', reminderForm, 'Medicine reminder added.');
+
+    if (saved) {
+      setReminderForm({
+        medicine_name: '',
+        dosage: '',
+        doses_per_day: 1,
+        quantity_total: 30,
+        quantity_remaining: '',
+        refill_at: '',
+        remind_at: '',
+      });
+    }
   };
 
   const updatePharmacy = async (event) => {
@@ -289,39 +386,79 @@ export default function App() {
     await postAction('/api/portal/pharmacy', pharmacyForm, 'Pharmacy location updated.', 'PATCH');
   };
 
+  const applyPharmacyDistances = (currentLat, currentLng, sourceLabel) => {
+    const pharmacies = withPharmacyDistances(portal?.pharmacies ?? [], currentLat, currentLng);
+    const mappedCount = pharmacies.filter((pharmacy) => hasDistance(pharmacy)).length;
+    const nextNotice = mappedCount
+      ? `${mappedCount} pharmacies sorted nearest first from ${sourceLabel}.`
+      : 'No pharmacies have map coordinates yet. Pharmacies can add them from their Location page.';
+
+    setPortal((data) => data ? { ...data, pharmacies } : data);
+    setLocationNotice(nextNotice);
+    showToast(mappedCount ? 'success' : 'warning', mappedCount ? 'Pharmacies sorted' : 'No mapped pharmacies', nextNotice);
+  };
+
   const sortPharmaciesByLocation = () => {
     if (!navigator.geolocation) {
       setLocationNotice('Location is not supported by this browser.');
+      showToast('error', 'Location unavailable', 'This browser does not support current location checks.');
       return;
     }
 
     setLocationNotice('Checking your current location...');
+    startRequest('Checking your location...');
     navigator.geolocation.getCurrentPosition((position) => {
-      const currentLat = position.coords.latitude;
-      const currentLng = position.coords.longitude;
-      const pharmacies = (portal?.pharmacies ?? []).map((pharmacy) => ({
-        ...pharmacy,
-        distance_km: pharmacy.latitude && pharmacy.longitude
-          ? distanceKm(currentLat, currentLng, Number(pharmacy.latitude), Number(pharmacy.longitude))
-          : null,
-      })).sort((a, b) => (a.distance_km ?? 999999) - (b.distance_km ?? 999999));
-
-      setPortal((data) => ({ ...data, pharmacies }));
-      setLocationNotice('Nearest pharmacies are sorted by distance.');
+      finishRequest();
+      applyPharmacyDistances(position.coords.latitude, position.coords.longitude, 'your current location');
     }, () => {
+      finishRequest();
       setLocationNotice('Location permission was not granted.');
+      showToast('warning', 'Location blocked', 'Allow location access or enter an address instead.');
     });
+  };
+
+  const sortPharmaciesByAddress = async (event) => {
+    event.preventDefault();
+
+    const query = locationAddress.trim();
+    if (!query) {
+      setLocationNotice('Enter an address or area, or use your current location.');
+      showToast('warning', 'Address needed', 'Enter an address or use your current location.');
+      return;
+    }
+
+    setLocationNotice('Finding that address...');
+    startRequest('Finding your address...');
+
+    try {
+      const coordinates = await geocodeAddress(query);
+
+      if (!coordinates) {
+        setLocationNotice('That address was not found. Try a more specific street, suburb, or city.');
+        showToast('warning', 'Address not found', 'Try a more specific street, suburb, or city.');
+        return;
+      }
+
+      applyPharmacyDistances(coordinates.latitude, coordinates.longitude, query);
+    } catch {
+      setLocationNotice('Address lookup failed. You can still sort using your current location.');
+      showToast('error', 'Address lookup failed', 'You can still sort using your current location.');
+    } finally {
+      finishRequest();
+    }
   };
 
   const enableMedicineAlerts = () => {
     if (!('Notification' in window)) {
       setNotice('This browser does not support notifications.');
+      showToast('error', 'Notifications unavailable', 'This browser does not support medicine alerts.');
       return;
     }
 
     Notification.requestPermission().then((permission) => {
       if (permission !== 'granted') {
         setNotice('Notification permission was not granted.');
+        showToast('warning', 'Alerts blocked', 'Notification permission was not granted.');
         return;
       }
 
@@ -347,86 +484,92 @@ export default function App() {
       });
 
       setNotice('Medicine alerts enabled while this dashboard is open.');
+      showToast('success', 'Medicine alerts enabled', 'Alerts will run while this dashboard is open.');
     });
   };
 
   if (!user) {
     return (
-      <main className="auth-page">
-        <section className="auth-hero">
-          <div className="brand-row">
-            <div className="brand-mark">DO</div>
-            <span>Doc Online</span>
-          </div>
-          <div className="hero-copy">
-            <span className="eyebrow">Role-based care portal</span>
-            <h1>One connected app for patients, doctors, and pharmacies.</h1>
-            <p>
-              Each login opens only the information needed for that role. Patient records stay private to the patient and assigned doctor.
-            </p>
-          </div>
-          <div className="metric-strip">
-            <div><strong>3</strong><span>Role portals</span></div>
-            <div><strong>Maps</strong><span>Nearest pharmacy support</span></div>
-            <div><strong>Alerts</strong><span>Medicine reminders</span></div>
-          </div>
-        </section>
-
-        <section className="auth-card">
-          <div className="card-heading">
-            <div>
-              <span className="eyebrow">Login</span>
-              <h2>{roleAccounts[selectedRole].label} access</h2>
+      <>
+        <main className="auth-page">
+          <section className="auth-hero">
+            <div className="brand-row">
+              <div className="brand-mark">DO</div>
+              <span>Doc Online</span>
             </div>
-          </div>
+            <div className="hero-copy">
+              <span className="eyebrow">Role-based care portal</span>
+              <h1>One connected app for patients, doctors, and pharmacies.</h1>
+              <p>
+                Each login opens only the information needed for that role. Patient records stay private to the patient and assigned doctor.
+              </p>
+            </div>
+            <div className="metric-strip">
+              <div><strong>3</strong><span>Role portals</span></div>
+              <div><strong>Maps</strong><span>Nearest pharmacy support</span></div>
+              <div><strong>Alerts</strong><span>Medicine reminders</span></div>
+            </div>
+          </section>
 
-          <div className="demo-row">
-            {Object.entries(roleAccounts).map(([key, account]) => (
-              <button className={selectedRole === key ? 'selected-demo' : ''} key={key} type="button" onClick={() => selectRole(key)}>
-                {account.label}
+          <section className="auth-card">
+            <div className="card-heading">
+              <div>
+                <span className="eyebrow">Login</span>
+                <h2>{roleAccounts[selectedRole].label} access</h2>
+              </div>
+            </div>
+
+            <div className="demo-row">
+              {Object.entries(roleAccounts).map(([key, account]) => (
+                <button className={selectedRole === key ? 'selected-demo' : ''} key={key} type="button" onClick={() => selectRole(key)}>
+                  {account.label}
+                </button>
+              ))}
+            </div>
+
+            <form className="form-stack" onSubmit={login}>
+              <Field label="Email address">
+                <input
+                  type="email"
+                  value={authForm.email}
+                  onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
+                  required
+                />
+              </Field>
+              <Field label="Password">
+                <input
+                  type="password"
+                  value={authForm.password}
+                  onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
+                  minLength={8}
+                  required
+                />
+              </Field>
+              <button className="primary-button" type="submit" disabled={authBusy}>
+                {authBusy ? 'Checking...' : `Log in as ${roleAccounts[selectedRole].label}`}
               </button>
-            ))}
-          </div>
+            </form>
 
-          <form className="form-stack" onSubmit={login}>
-            <Field label="Email address">
-              <input
-                type="email"
-                value={authForm.email}
-                onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
-                required
-              />
-            </Field>
-            <Field label="Password">
-              <input
-                type="password"
-                value={authForm.password}
-                onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
-                minLength={8}
-                required
-              />
-            </Field>
-            <button className="primary-button" type="submit" disabled={authBusy}>
-              {authBusy ? 'Checking...' : `Log in as ${roleAccounts[selectedRole].label}`}
-            </button>
-          </form>
+            {error && <p className="message error-message">{error}</p>}
+            {notice && <p className="message success-message">{notice}</p>}
 
-          {error && <p className="message error-message">{error}</p>}
-          {notice && <p className="message success-message">{notice}</p>}
-
-          <div className="credential-card">
-            <span>Demo account</span>
-            <strong>{roleAccounts[selectedRole].email}</strong>
-            <code>{roleAccounts[selectedRole].password}</code>
-          </div>
-        </section>
-      </main>
+            <div className="credential-card">
+              <span>Demo account</span>
+              <strong>{roleAccounts[selectedRole].email}</strong>
+              <code>{roleAccounts[selectedRole].password}</code>
+            </div>
+          </section>
+        </main>
+        <PageLoader active={pendingRequests > 0 || authBusy} message={loaderMessage} />
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+      </>
     );
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <>
+      <div className="app-shell">
+        <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark">DO</div>
           <span>Doc Online</span>
@@ -455,7 +598,7 @@ export default function App() {
         </nav>
 
         <div className="sidebar-actions">
-          <button className="secondary-button" type="button" onClick={loadPortal}>Refresh</button>
+          <button className="secondary-button" type="button" onClick={() => loadPortal()}>Refresh</button>
           <button className="ghost-button" type="button" onClick={logout}>Log out</button>
         </div>
       </aside>
@@ -484,7 +627,10 @@ export default function App() {
             submitReminder={submitReminder}
             postAction={postAction}
             sortPharmaciesByLocation={sortPharmaciesByLocation}
+            sortPharmaciesByAddress={sortPharmaciesByAddress}
             locationNotice={locationNotice}
+            locationAddress={locationAddress}
+            setLocationAddress={setLocationAddress}
             enableMedicineAlerts={enableMedicineAlerts}
           />
         )}
@@ -500,8 +646,11 @@ export default function App() {
             updatePharmacy={updatePharmacy}
           />
         )}
-      </main>
-    </div>
+        </main>
+      </div>
+      <PageLoader active={pendingRequests > 0 || loading} message={loaderMessage} />
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 }
 
@@ -516,7 +665,10 @@ function PatientPortal({
   submitReminder,
   postAction,
   sortPharmaciesByLocation,
+  sortPharmaciesByAddress,
   locationNotice,
+  locationAddress,
+  setLocationAddress,
   enableMedicineAlerts,
 }) {
   const stats = portal?.stats ?? {};
@@ -612,15 +764,36 @@ function PatientPortal({
       <section className="section-stack">
         <div className="topbar">
           <SectionHeading kicker="Nearest pharmacy" title="Find available pharmacies" text={locationNotice} />
-          <button className="secondary-button" type="button" onClick={sortPharmaciesByLocation}>Use my location</button>
+          <div className="pharmacy-location-tools">
+            <form className="location-search" onSubmit={sortPharmaciesByAddress}>
+              <input
+                aria-label="Address to sort pharmacies from"
+                placeholder="Enter your address or area"
+                value={locationAddress}
+                onChange={(event) => setLocationAddress(event.target.value)}
+              />
+              <button className="primary-button" type="submit">Use address</button>
+            </form>
+            <button className="secondary-button" type="button" onClick={sortPharmaciesByLocation}>Use my location</button>
+          </div>
         </div>
         <div className="card-grid">
           {pharmacies.map((pharmacy) => (
-            <article className="data-card" key={pharmacy.id}>
+            <article
+              className={`data-card pharmacy-card ${hasDistance(pharmacy) ? 'has-distance' : 'needs-location'}`}
+              key={pharmacy.id}
+              style={pharmacyDistanceStyle(pharmacies, pharmacy)}
+            >
               <div className="map-tile"><span /></div>
-              <h3>{pharmacy.name}</h3>
-              <p>{pharmacy.address ?? 'Address not set'}</p>
-              <div className="meta-row"><span>Distance</span><strong>{pharmacy.distance_km ? `${pharmacy.distance_km.toFixed(1)} km` : 'Allow location'}</strong></div>
+              <div className="pharmacy-card-head">
+                <div>
+                  <h3>{pharmacy.name}</h3>
+                  <p>{pharmacy.address ?? 'Address not set'}</p>
+                </div>
+                {hasDistance(pharmacy) && <span className="distance-chip">{distanceRankLabel(pharmacies, pharmacy)}</span>}
+              </div>
+              <div className="distance-spectrum"><span /></div>
+              <div className="meta-row"><span>Distance</span><strong>{hasDistance(pharmacy) ? `${Number(pharmacy.distance_km).toFixed(1)} km` : 'Add location'}</strong></div>
               <div className="meta-row"><span>Hours</span><strong>{pharmacy.hours ?? 'Not set'}</strong></div>
               <div className="meta-row"><span>Phone</span><strong>{pharmacy.phone ?? 'Not provided'}</strong></div>
               {pharmacy.latitude && pharmacy.longitude && (
@@ -917,6 +1090,103 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat / 2) ** 2
     + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
   return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function withPharmacyDistances(pharmacies, currentLat, currentLng) {
+  return pharmacies
+    .map((pharmacy) => {
+      const latitude = Number(pharmacy.latitude);
+      const longitude = Number(pharmacy.longitude);
+      const canMeasure = Number.isFinite(latitude) && Number.isFinite(longitude);
+
+      return {
+        ...pharmacy,
+        distance_km: canMeasure ? distanceKm(currentLat, currentLng, latitude, longitude) : null,
+      };
+    })
+    .sort((a, b) => {
+      if (!hasDistance(a) && !hasDistance(b)) return String(a.name).localeCompare(String(b.name));
+      if (!hasDistance(a)) return 1;
+      if (!hasDistance(b)) return -1;
+      return Number(a.distance_km) - Number(b.distance_km);
+    });
+}
+
+async function geocodeAddress(query) {
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`, {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error('Address lookup failed.');
+  }
+
+  const [result] = await response.json();
+
+  if (!result) return null;
+
+  return {
+    latitude: Number(result.lat),
+    longitude: Number(result.lon),
+  };
+}
+
+function hasDistance(pharmacy) {
+  return Number.isFinite(Number(pharmacy?.distance_km));
+}
+
+function locatedPharmacies(pharmacies) {
+  return pharmacies.filter((pharmacy) => hasDistance(pharmacy));
+}
+
+function distanceRankLabel(pharmacies, pharmacy) {
+  const located = locatedPharmacies(pharmacies);
+  const rank = located.findIndex((item) => item.id === pharmacy.id);
+
+  if (rank === -1) return 'Needs location';
+  if (rank === 0) return 'Nearest';
+  if (rank === located.length - 1) return 'Farthest';
+
+  return `#${rank + 1} nearby`;
+}
+
+function pharmacyDistanceStyle(pharmacies, pharmacy) {
+  const located = locatedPharmacies(pharmacies);
+  const rank = located.findIndex((item) => item.id === pharmacy.id);
+
+  if (rank === -1) {
+    return {
+      '--distance-color': '#656d76',
+      '--distance-bg': 'rgba(101, 109, 118, 0.08)',
+      '--distance-strength': '0%',
+    };
+  }
+
+  const ratio = located.length > 1 ? rank / (located.length - 1) : 0;
+  const color = spectrumColor(ratio);
+
+  return {
+    '--distance-color': `rgb(${color.join(', ')})`,
+    '--distance-bg': `rgba(${color.join(', ')}, ${0.14 - ratio * 0.04})`,
+    '--distance-strength': `${Math.max(12, Math.round((1 - ratio) * 100))}%`,
+  };
+}
+
+function spectrumColor(ratio) {
+  const green = [22, 138, 99];
+  const blue = [37, 99, 235];
+  const amber = [183, 121, 31];
+  const midpoint = 0.52;
+
+  if (ratio <= midpoint) {
+    return mixColor(green, blue, ratio / midpoint);
+  }
+
+  return mixColor(blue, amber, (ratio - midpoint) / (1 - midpoint));
+}
+
+function mixColor(from, to, amount) {
+  return from.map((value, index) => Math.round(value + (to[index] - value) * amount));
 }
 
 function stockPercent(reminder) {

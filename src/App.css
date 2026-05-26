@@ -294,6 +294,168 @@ textarea:focus {
   border: 1px solid #c6f6d5;
 }
 
+.page-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(246, 247, 249, 0.62);
+  backdrop-filter: blur(5px);
+}
+
+.loader-panel {
+  width: min(100%, 420px);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.loader-panel strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+
+.loader-panel p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.loader-mark {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(22, 138, 99, 0.12), rgba(37, 99, 235, 0.1)),
+    #fff;
+  border: 1px solid var(--line-soft);
+}
+
+.loader-mark span {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: loaderPulse 1s infinite ease-in-out;
+}
+
+.loader-mark span:nth-child(1) {
+  --loader-x: -15px;
+}
+
+.loader-mark span:nth-child(2) {
+  background: var(--blue);
+  animation-delay: 0.16s;
+}
+
+.loader-mark span:nth-child(3) {
+  background: var(--amber);
+  animation-delay: 0.32s;
+  --loader-x: 15px;
+}
+
+.toast-viewport {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 100;
+  width: min(420px, calc(100vw - 36px));
+  display: grid;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  animation: toastIn 0.22s ease-out;
+}
+
+.toast-card strong {
+  display: block;
+  color: var(--ink);
+}
+
+.toast-card p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.toast-card button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 900;
+}
+
+.toast-card button:hover {
+  border-color: var(--line);
+  background: var(--panel-soft);
+}
+
+.toast-dot {
+  width: 12px;
+  height: 12px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(22, 138, 99, 0.12);
+}
+
+.toast-card.success {
+  border-left-color: var(--accent);
+}
+
+.toast-card.success .toast-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(22, 138, 99, 0.12);
+}
+
+.toast-card.error {
+  border-left-color: var(--danger);
+}
+
+.toast-card.error .toast-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 5px rgba(180, 35, 24, 0.12);
+}
+
+.toast-card.warning {
+  border-left-color: var(--amber);
+}
+
+.toast-card.warning .toast-dot {
+  background: var(--amber);
+  box-shadow: 0 0 0 5px rgba(183, 121, 31, 0.14);
+}
+
 .credential-card {
   display: grid;
   gap: 6px;
@@ -658,12 +820,84 @@ textarea:focus {
   gap: 16px;
 }
 
+.pharmacy-location-tools {
+  width: min(100%, 620px);
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 10px;
+}
+
+.location-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
 .data-card,
 .package-card {
   padding: 18px;
   display: grid;
   gap: 12px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pharmacy-card {
+  --distance-color: var(--accent);
+  --distance-bg: rgba(22, 138, 99, 0.1);
+  --distance-strength: 0%;
+  border-color: color-mix(in srgb, var(--distance-color) 34%, var(--line));
+  background:
+    linear-gradient(180deg, var(--distance-bg), transparent 42%),
+    var(--panel);
+}
+
+.pharmacy-card.has-distance {
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--distance-color) 16%, transparent);
+}
+
+.pharmacy-card.needs-location {
+  border-style: dashed;
+}
+
+.pharmacy-card-head {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.pharmacy-card-head h3 {
+  margin-bottom: 4px;
+}
+
+.distance-chip {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--distance-color);
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--distance-color) 38%, var(--line));
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.distance-spectrum {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line-soft);
+}
+
+.distance-spectrum span {
+  display: block;
+  width: var(--distance-strength);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--distance-color), color-mix(in srgb, var(--distance-color) 28%, #fff));
 }
 
 .data-card:hover,
@@ -693,10 +927,10 @@ textarea:focus {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--distance-color, var(--accent));
   top: 46px;
   left: 50%;
-  box-shadow: 0 0 0 10px rgba(22, 138, 99, 0.14);
+  box-shadow: 0 0 0 10px color-mix(in srgb, var(--distance-color, var(--accent)) 18%, transparent);
 }
 
 .package-card.selected {
@@ -802,6 +1036,29 @@ td {
   }
 }
 
+@keyframes loaderPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translateX(var(--loader-x, 0)) scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(var(--loader-x, 0)) scale(1.12);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 1080px) {
   .auth-page,
   .app-shell,
@@ -849,9 +1106,20 @@ td {
   }
 
   .topbar-actions,
+  .pharmacy-location-tools,
+  .location-search,
   .secondary-button,
   .ghost-button {
     width: 100%;
+  }
+
+  .pharmacy-location-tools,
+  .location-search {
+    grid-template-columns: 1fr;
+  }
+
+  .pharmacy-card-head {
+    display: grid;
   }
 
   .table-panel {
