@@ -181,6 +181,12 @@
   font-weight: 750;
 }
 
+.demo-row button.selected-demo {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 .form-stack {
   display: grid;
   gap: 14px;
@@ -382,6 +388,21 @@ textarea:focus {
   background: #fff4d6;
 }
 
+.role-chip.doctor {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.role-chip.pharmacy {
+  color: #7c2d12;
+  background: #ffedd5;
+}
+
+.role-chip.danger {
+  color: var(--danger);
+  background: #fff2f0;
+}
+
 .nav-list {
   display: grid;
   align-content: start;
@@ -558,6 +579,70 @@ textarea:focus {
   border: 1px solid var(--line-soft);
   color: var(--muted);
   font-weight: 650;
+}
+
+.chart-row {
+  display: grid;
+  gap: 8px;
+}
+
+.chart-label,
+.queue-head,
+.button-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chart-label span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.bar-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line-soft);
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.bar-fill.amber {
+  background: var(--amber);
+}
+
+.bar-fill.blue {
+  background: var(--blue);
+}
+
+.stack-list {
+  display: grid;
+  gap: 12px;
+}
+
+.queue-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.queue-card p {
+  color: var(--muted);
+}
+
+.form-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .section-heading {
