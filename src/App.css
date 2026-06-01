@@ -229,6 +229,7 @@ textarea:focus {
 .primary-button,
 .secondary-button,
 .ghost-button,
+.danger-button,
 .link-button {
   min-height: 40px;
   border-radius: 8px;
@@ -248,9 +249,17 @@ textarea:focus {
   box-shadow: 0 12px 22px rgba(22, 138, 99, 0.24);
 }
 
+.danger-button {
+  border: 1px solid var(--danger);
+  background: var(--danger);
+  color: white;
+  box-shadow: 0 12px 22px rgba(180, 35, 24, 0.18);
+}
+
 .primary-button:hover,
 .secondary-button:hover,
 .ghost-button:hover,
+.danger-button:hover,
 .link-button:hover,
 .demo-row button:hover,
 .auth-mode-row button:hover,
@@ -261,6 +270,14 @@ textarea:focus {
 .primary-button:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+.primary-button.compact,
+.danger-button.compact {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  box-shadow: none;
 }
 
 .secondary-button {
@@ -519,6 +536,25 @@ textarea:focus {
 
 .user-card p {
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.user-package-strip {
+  display: grid;
+  gap: 3px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.user-package-strip span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.user-package-strip strong {
   overflow-wrap: anywhere;
 }
 
@@ -807,6 +843,78 @@ textarea:focus {
 
 .queue-card p {
   color: var(--muted);
+}
+
+.patient-profile-card h2 {
+  margin: 6px 0 4px;
+}
+
+.patient-package-card {
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid rgba(22, 138, 99, 0.32);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(22, 138, 99, 0.1), transparent 44%),
+    linear-gradient(250deg, rgba(37, 99, 235, 0.08), transparent 42%),
+    #fff;
+  box-shadow: var(--shadow-soft);
+}
+
+.patient-package-card.inactive,
+.patient-package-card.empty {
+  border-color: rgba(183, 121, 31, 0.38);
+  background:
+    linear-gradient(135deg, rgba(183, 121, 31, 0.1), transparent 44%),
+    #fff;
+}
+
+.patient-package-card.detailed {
+  gap: 16px;
+}
+
+.patient-package-card h3 {
+  margin-top: 6px;
+  font-size: 28px;
+  line-height: 1.12;
+}
+
+.patient-package-card p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.package-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.package-title-row strong {
+  flex: 0 0 auto;
+  color: var(--accent-dark);
+  font-size: 24px;
+}
+
+.package-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.package-status-row > span:last-child {
+  color: var(--muted);
+  font-weight: 750;
+  text-align: right;
 }
 
 .form-two {
@@ -1298,6 +1406,52 @@ td {
   overflow-wrap: anywhere;
 }
 
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-pill,
+.muted-action {
+  width: fit-content;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.status-pill {
+  color: var(--accent-dark);
+  background: #e8f5ef;
+}
+
+.status-pill.pending,
+.status-pill.refill_due {
+  color: #7c4a03;
+  background: #fff4d6;
+}
+
+.status-pill.cancelled,
+.status-pill.finished {
+  color: var(--danger);
+  background: #fff2f0;
+}
+
+.status-pill.completed,
+.status-pill.confirmed {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.muted-action {
+  color: var(--muted);
+  background: var(--panel-soft);
+}
+
 .empty-state {
   display: grid;
   place-items: center;
@@ -1467,9 +1621,16 @@ td {
   .card-heading,
   .topbar,
   .package-head,
+  .package-title-row,
+  .package-status-row,
   .profile-block {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .package-title-row strong,
+  .package-status-row > span:last-child {
+    text-align: left;
   }
 
   .topbar-actions,

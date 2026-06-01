@@ -12,6 +12,7 @@ const roleAccounts = {
 const navByRole = {
   patient: [
     { id: 'overview', label: 'Overview' },
+    { id: 'profile', label: 'Profile' },
     { id: 'assistant', label: 'CareGuide AI' },
     { id: 'bookings', label: 'Bookings' },
     { id: 'pharmacies', label: 'Pharmacies' },
@@ -32,6 +33,16 @@ const navByRole = {
   ],
 };
 
+const emptyReminderForm = {
+  medicine_name: '',
+  dosage: '',
+  doses_per_day: '',
+  quantity_total: '',
+  quantity_remaining: '',
+  refill_at: '',
+  remind_at: '',
+};
+
 function initials(name = 'DO') {
   return name
     .split(' ')
@@ -49,6 +60,17 @@ function formatDate(value) {
 function formatShortDate(value) {
   if (!value) return 'Not set';
   return new Date(value).toLocaleDateString([], { dateStyle: 'medium' });
+}
+
+function formatCurrency(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 'No price set';
+
+  return new Intl.NumberFormat([], {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+  }).format(amount);
 }
 
 function Field({ label, children }) {
@@ -93,6 +115,95 @@ function Bar({ label, value, tone = 'green' }) {
         <div className={`bar-fill ${tone}`} style={{ width: `${width}%` }} />
       </div>
     </div>
+  );
+}
+
+function selectedCarePackage(user) {
+  return user?.care_package ?? user?.carePackage ?? null;
+}
+
+function packageFeatures(pack) {
+  if (!pack?.features) return [];
+  if (Array.isArray(pack.features)) return pack.features.filter(Boolean);
+  if (typeof pack.features === 'string') {
+    try {
+      const parsed = JSON.parse(pack.features);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [pack.features];
+    } catch {
+      return pack.features.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+function statusLabel(status) {
+  return String(status ?? 'pending')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function integerOrNull(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+}
+
+function medicationPayload(form) {
+  const payload = {
+    ...form,
+    doses_per_day: integerOrNull(form.doses_per_day),
+    quantity_total: integerOrNull(form.quantity_total),
+  };
+
+  const remaining = integerOrNull(form.quantity_remaining);
+  if (remaining === null) {
+    delete payload.quantity_remaining;
+  } else {
+    payload.quantity_remaining = remaining;
+  }
+
+  return payload;
+}
+
+function PatientPackageCard({ user, detailed = false }) {
+  const pack = selectedCarePackage(user);
+  const features = packageFeatures(pack);
+  const active = Boolean(user?.care_package_active);
+
+  if (!pack) {
+    return (
+      <article className="patient-package-card empty">
+        <span className="eyebrow">Care package</span>
+        <h3>No package selected yet</h3>
+        <p>Your selected care package will appear here after it is assigned to your patient account.</p>
+        <span className="role-chip danger">Not assigned</span>
+      </article>
+    );
+  }
+
+  return (
+    <article className={`patient-package-card ${active ? 'active' : 'inactive'} ${detailed ? 'detailed' : ''}`}>
+      <div className="package-title-row">
+        <div>
+          <span className="eyebrow">Current care package</span>
+          <h3>{pack.name}</h3>
+        </div>
+        <strong>{formatCurrency(pack.price)}</strong>
+      </div>
+      {pack.description && <p>{pack.description}</p>}
+      <div className="package-status-row">
+        <span className={`role-chip ${active ? 'patient' : 'danger'}`}>{active ? 'Active package' : 'Pending activation'}</span>
+        <span>Selected for {user?.name ?? 'this patient'}</span>
+      </div>
+      {!!features.length && (
+        <ul className="check-list">
+          {features.slice(0, detailed ? features.length : 3).map((feature) => (
+            <li key={feature}>{feature}</li>
+          ))}
+        </ul>
+      )}
+    </article>
   );
 }
 
@@ -295,15 +406,7 @@ export default function App() {
     reason: '',
     symptoms: '',
   });
-  const [reminderForm, setReminderForm] = useState({
-    medicine_name: '',
-    dosage: '',
-    doses_per_day: 1,
-    quantity_total: 30,
-    quantity_remaining: '',
-    refill_at: '',
-    remind_at: '',
-  });
+  const [reminderForm, setReminderForm] = useState(emptyReminderForm);
   const [pharmacyForm, setPharmacyForm] = useState({
     address: '',
     latitude: '',
@@ -576,18 +679,10 @@ export default function App() {
 
   const submitReminder = async (event) => {
     event.preventDefault();
-    const saved = await postAction('/api/portal/medication-reminders', reminderForm, 'Medicine reminder added.');
+    const saved = await postAction('/api/portal/medication-reminders', medicationPayload(reminderForm), 'Medicine reminder added.');
 
     if (saved) {
-      setReminderForm({
-        medicine_name: '',
-        dosage: '',
-        doses_per_day: 1,
-        quantity_total: 30,
-        quantity_remaining: '',
-        refill_at: '',
-        remind_at: '',
-      });
+      setReminderForm(emptyReminderForm);
     }
   };
 
@@ -707,46 +802,6 @@ export default function App() {
     } finally {
       finishRequest();
     }
-  };
-
-  const enableMedicineAlerts = () => {
-    if (!('Notification' in window)) {
-      setNotice('This browser does not support notifications.');
-      showToast('error', 'Notifications unavailable', 'This browser does not support medicine alerts.');
-      return;
-    }
-
-    Notification.requestPermission().then((permission) => {
-      if (permission !== 'granted') {
-        setNotice('Notification permission was not granted.');
-        showToast('warning', 'Alerts blocked', 'Notification permission was not granted.');
-        return;
-      }
-
-      const due = (portal?.reminders ?? []).filter((reminder) => needsRefill(reminder));
-      if (due.length) {
-        new Notification('Medicine refill needed', {
-          body: `${due.slice(0, 2).map((item) => item.medicine_name).join(', ')} running low.`,
-        });
-      }
-
-      (portal?.reminders ?? []).forEach((reminder) => {
-        if (!reminder.remind_at) return;
-
-        const [hours, minutes] = reminder.remind_at.slice(0, 5).split(':').map(Number);
-        const now = new Date();
-        const alertAt = new Date();
-        alertAt.setHours(hours, minutes, 0, 0);
-        if (alertAt <= now) alertAt.setDate(alertAt.getDate() + 1);
-
-        window.setTimeout(() => {
-          new Notification('Medicine reminder', { body: `Time to take ${reminder.medicine_name}.` });
-        }, alertAt.getTime() - now.getTime());
-      });
-
-      setNotice('Medicine alerts enabled while this dashboard is open.');
-      showToast('success', 'Medicine alerts enabled', 'Alerts will run while this dashboard is open.');
-    });
   };
 
   if (!user) {
@@ -890,6 +945,12 @@ export default function App() {
             <p>{user.email}</p>
           </div>
           <span className={`role-chip ${role}`}>{roleAccounts[role]?.label ?? role}</span>
+          {role === 'patient' && (
+            <div className="user-package-strip">
+              <span>Care package</span>
+              <strong>{selectedCarePackage(user)?.name ?? 'Not selected'}</strong>
+            </div>
+          )}
         </div>
 
         <nav className="nav-list" aria-label="Main navigation">
@@ -945,7 +1006,6 @@ export default function App() {
             locationNotice={locationNotice}
             locationAddress={locationAddress}
             setLocationAddress={setLocationAddress}
-            enableMedicineAlerts={enableMedicineAlerts}
           />
         )}
 
@@ -956,6 +1016,7 @@ export default function App() {
             availabilityForm={availabilityForm}
             setAvailabilityForm={setAvailabilityForm}
             updateDoctorAvailability={updateDoctorAvailability}
+            postAction={postAction}
           />
         )}
 
@@ -966,6 +1027,7 @@ export default function App() {
             pharmacyForm={pharmacyForm}
             setPharmacyForm={setPharmacyForm}
             updatePharmacy={updatePharmacy}
+            postAction={postAction}
           />
         )}
         </main>
@@ -1009,7 +1071,6 @@ function PatientPortal({
   locationNotice,
   locationAddress,
   setLocationAddress,
-  enableMedicineAlerts,
 }) {
   const stats = portal?.stats ?? {};
   const doctors = portal?.doctors ?? [];
@@ -1017,6 +1078,7 @@ function PatientPortal({
   const bookings = portal?.bookings ?? [];
   const reminders = portal?.reminders ?? [];
   const records = portal?.records ?? [];
+  const patient = portal?.user;
 
   if (activeView === 'assistant') {
     return (
@@ -1061,6 +1123,7 @@ function PatientPortal({
           </div>
         </div>
         <div className="content-grid two">
+          <PatientPackageCard user={patient} />
           <article className="panel">
             <span className="eyebrow">Medicine analytics</span>
             <h3>Current stock</h3>
@@ -1078,6 +1141,31 @@ function PatientPortal({
             {!records.length && <EmptyState title="No records yet" text="Doctor records will appear after visits." />}
           </article>
         </div>
+      </section>
+    );
+  }
+
+  if (activeView === 'profile') {
+    return (
+      <section className="content-grid two">
+        <article className="panel patient-profile-card">
+          <div className="profile-block">
+            <div className="avatar large">{initials(patient?.name)}</div>
+            <div>
+              <span className="eyebrow">Patient profile</span>
+              <h2>{patient?.name ?? 'Patient'}</h2>
+              <p>{patient?.email ?? 'Email not available'}</p>
+            </div>
+          </div>
+          <div className="detail-list">
+            <div><span>Account status</span><strong>{patient?.is_active ? 'Active' : 'Inactive'}</strong></div>
+            <div><span>Care package status</span><strong>{patient?.care_package_active ? 'Active' : 'Pending activation'}</strong></div>
+            <div><span>Bookings</span><strong>{stats.bookings ?? 0}</strong></div>
+            <div><span>Medical records</span><strong>{records.length}</strong></div>
+          </div>
+        </article>
+
+        <PatientPackageCard user={patient} detailed />
       </section>
     );
   }
@@ -1177,8 +1265,8 @@ function PatientPortal({
       <section className="content-grid two">
         <article className="panel">
           <div className="topbar">
-            <SectionHeading kicker="Medicine reminder" title="Add medication" text="Track remaining stock and receive browser alerts while the dashboard is open." />
-            <button className="secondary-button" type="button" onClick={enableMedicineAlerts}>Enable alerts</button>
+            <SectionHeading kicker="Medicine reminder" title="Add medication" text="Track stock here. Dose and refill alerts are sent to your email from the backend." />
+            <span className="role-chip patient">Email alerts</span>
           </div>
           <form className="form-stack" onSubmit={submitReminder}>
             <Field label="Medicine">
@@ -1188,16 +1276,38 @@ function PatientPortal({
               <input value={reminderForm.dosage} onChange={(event) => setReminderForm({ ...reminderForm, dosage: event.target.value })} />
             </Field>
             <div className="form-two">
-              <Field label="Doses per day">
-                <input type="number" min="1" max="12" value={reminderForm.doses_per_day} onChange={(event) => setReminderForm({ ...reminderForm, doses_per_day: Number(event.target.value) })} />
+              <Field label="Pills taken each time">
+                <input
+                  type="number"
+                  min="1"
+                  max={reminderForm.quantity_total ? Math.min(12, Number(reminderForm.quantity_total)) : 12}
+                  placeholder="Example: 2"
+                  value={reminderForm.doses_per_day}
+                  onChange={(event) => setReminderForm({ ...reminderForm, doses_per_day: event.target.value })}
+                  required
+                />
               </Field>
               <Field label="Total stock">
-                <input type="number" min="1" value={reminderForm.quantity_total} onChange={(event) => setReminderForm({ ...reminderForm, quantity_total: Number(event.target.value) })} />
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Example: 30"
+                  value={reminderForm.quantity_total}
+                  onChange={(event) => setReminderForm({ ...reminderForm, quantity_total: event.target.value })}
+                  required
+                />
               </Field>
             </div>
             <div className="form-two">
               <Field label="Remaining">
-                <input type="number" min="0" value={reminderForm.quantity_remaining} onChange={(event) => setReminderForm({ ...reminderForm, quantity_remaining: event.target.value })} />
+                <input
+                  type="number"
+                  min="0"
+                  max={reminderForm.quantity_total || undefined}
+                  placeholder="Leave blank if full"
+                  value={reminderForm.quantity_remaining}
+                  onChange={(event) => setReminderForm({ ...reminderForm, quantity_remaining: event.target.value })}
+                />
               </Field>
               <Field label="Reminder time">
                 <input type="time" value={reminderForm.remind_at} onChange={(event) => setReminderForm({ ...reminderForm, remind_at: event.target.value })} />
@@ -1217,13 +1327,13 @@ function PatientPortal({
                 <div className="queue-head">
                   <div>
                     <h3>{reminder.medicine_name}</h3>
-                    <p>{reminder.dosage || 'No dosage'} · {reminder.quantity_remaining} of {reminder.quantity_total} left</p>
+                    <p>{reminder.dosage || 'No dosage'} · takes {reminder.doses_per_day} each time · {reminder.quantity_remaining} of {reminder.quantity_total} left</p>
                   </div>
                   <span className={`role-chip ${needsRefill(reminder) ? 'danger' : 'patient'}`}>{needsRefill(reminder) ? 'Refill soon' : 'On track'}</span>
                 </div>
                 <Bar label="Stock" value={stockPercent(reminder)} tone={needsRefill(reminder) ? 'amber' : 'green'} />
                 <div className="button-row">
-                  <button className="secondary-button" type="button" onClick={() => postAction(`/api/portal/medication-reminders/${reminder.id}/taken`, {}, 'Dose recorded.', 'PATCH')}>Mark dose taken</button>
+                  <button className="secondary-button" type="button" onClick={() => postAction(`/api/portal/medication-reminders/${reminder.id}/taken`, {}, `${reminder.doses_per_day} pill${Number(reminder.doses_per_day) === 1 ? '' : 's'} deducted.`, 'PATCH')}>Mark dose taken</button>
                   <button className="primary-button" type="button" onClick={() => postAction(`/api/portal/medication-reminders/${reminder.id}/refilled`, {}, 'Medicine refilled.', 'PATCH')}>Refilled</button>
                 </div>
               </div>
@@ -1248,11 +1358,20 @@ function PatientPortal({
   );
 }
 
-function DoctorPortal({ activeView, portal, availabilityForm, setAvailabilityForm, updateDoctorAvailability }) {
+function DoctorPortal({ activeView, portal, availabilityForm, setAvailabilityForm, updateDoctorAvailability, postAction }) {
   const stats = portal?.stats ?? {};
   const bookings = portal?.bookings ?? [];
   const records = portal?.records ?? [];
   const doctor = portal?.doctor;
+  const updateBookingStatus = (booking, status) => {
+    const labels = {
+      confirmed: 'Booking accepted.',
+      cancelled: 'Booking denied.',
+      completed: 'Booking marked completed.',
+    };
+
+    return postAction(`/api/portal/doctor/bookings/${booking.id}`, { status }, labels[status] ?? 'Booking updated.', 'PATCH');
+  };
 
   if (activeView === 'overview') {
     return (
@@ -1348,7 +1467,24 @@ function DoctorPortal({ activeView, portal, availabilityForm, setAvailabilityFor
           ['Date', (item) => formatDate(item.scheduled_for)],
           ['Reason', (item) => item.reason],
           ['Symptoms', (item) => item.symptoms ?? 'Not provided'],
-          ['Status', (item) => item.status],
+          ['Status', (item) => <span className={`status-pill ${item.status}`}>{statusLabel(item.status)}</span>],
+          ['Actions', (item) => (
+            <div className="table-actions">
+              {item.status === 'pending' && (
+                <>
+                  <button className="primary-button compact" type="button" onClick={() => updateBookingStatus(item, 'confirmed')}>Accept</button>
+                  <button className="danger-button compact" type="button" onClick={() => updateBookingStatus(item, 'cancelled')}>Deny</button>
+                </>
+              )}
+              {item.status === 'confirmed' && (
+                <>
+                  <button className="primary-button compact" type="button" onClick={() => updateBookingStatus(item, 'completed')}>Complete</button>
+                  <button className="danger-button compact" type="button" onClick={() => updateBookingStatus(item, 'cancelled')}>Cancel</button>
+                </>
+              )}
+              {!['pending', 'confirmed'].includes(item.status) && <span className="muted-action">No action</span>}
+            </div>
+          )],
         ]} />
       </section>
     );
@@ -1369,11 +1505,17 @@ function DoctorPortal({ activeView, portal, availabilityForm, setAvailabilityFor
   );
 }
 
-function PharmacyPortal({ activeView, portal, pharmacyForm, setPharmacyForm, updatePharmacy }) {
+function PharmacyPortal({ activeView, portal, pharmacyForm, setPharmacyForm, updatePharmacy, postAction }) {
   const stats = portal?.stats ?? {};
   const queue = portal?.medication_queue ?? [];
   const illnesses = portal?.illness_summary ?? [];
   const pharmacy = portal?.pharmacy;
+  const markDispensed = (item) => postAction(
+    `/api/portal/pharmacy/medication-reminders/${item.id}/dispensed`,
+    { quantity_total: Math.max(1, Number(item.quantity_total) || Number(item.quantity_remaining) || 30) },
+    `${item.medicine_name} marked dispensed.`,
+    'PATCH'
+  );
 
   if (activeView === 'overview') {
     return (
@@ -1460,7 +1602,12 @@ function PharmacyPortal({ activeView, portal, pharmacyForm, setPharmacyForm, upd
           ['Dosage', (item) => item.dosage ?? 'Not set'],
           ['Remaining', (item) => item.quantity_remaining],
           ['Refill date', (item) => formatShortDate(item.refill_at)],
-          ['Status', (item) => item.status],
+          ['Status', (item) => <span className={`status-pill ${item.status}`}>{statusLabel(item.status)}</span>],
+          ['Actions', (item) => (
+            <div className="table-actions">
+              <button className="primary-button compact" type="button" onClick={() => markDispensed(item)}>Dispensed</button>
+            </div>
+          )],
         ]} />
       </section>
     );
